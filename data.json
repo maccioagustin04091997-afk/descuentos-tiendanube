@@ -1,0 +1,88 @@
+{
+  "stores": {
+    "4538420": {
+      "store_id": "4538420",
+      "access_token": "4266a753b002c259c772d0bf4232c7d6901684e0",
+      "store_name": "La Plaza Materiales",
+      "promotion_id": "b14841ed-0157-4f80-ae28-35c593f5d41e",
+      "connected_at": "2026-04-02T22:44:58.741Z"
+    }
+  },
+  "rules": [
+    {
+      "id": 1,
+      "store_id": "4538420",
+      "name": "Descuento por Volumen General",
+      "target_type": "all",
+      "target_ids": [],
+      "scales": [
+        {
+          "min": 1,
+          "max": 1,
+          "pct": 0
+        },
+        {
+          "min": 2,
+          "max": 4,
+          "pct": 4.5
+        },
+        {
+          "min": 5,
+          "max": 9,
+          "pct": 8
+        },
+        {
+          "min": 10,
+          "max": 19,
+          "pct": 12
+        },
+        {
+          "min": 20,
+          "max": null,
+          "pct": 15
+        }
+      ],
+      "active": true,
+      "created_at": "2026-04-02T22:51:20.279Z"
+    },
+    {
+      "id": 2,
+      "store_id": "4538420",
+      "name": "Test Producto",
+      "target_type": "products",
+      "target_ids": [
+        "210516274"
+      ],
+      "scales": [
+        {
+          "min": 1,
+          "max": 1,
+          "pct": 0
+        },
+        {
+          "min": 2,
+          "max": 4,
+          "pct": 4.5
+        },
+        {
+          "min": 5,
+          "max": 9,
+          "pct": 8
+        },
+        {
+          "min": 10,
+          "max": 19,
+          "pct": 12
+        },
+        {
+          "min": 20,
+          "max": null,
+          "pct": 15
+        }
+      ],
+      "active": true,
+      "created_at": "2026-04-02T23:13:57.620Z"
+    }
+  ],
+  "nextRuleId": 3
+}

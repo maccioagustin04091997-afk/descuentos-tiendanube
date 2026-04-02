@@ -1,0 +1,1148 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Descuentos por Cantidad — Tienda Nube</title>
+<style>
+  /* ── Reset & Variables ──────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --blue:     #1F4DD8;
+    --blue-lt:  #E8EEFB;
+    --blue-dk:  #1540B5;
+    --green:    #16A34A;
+    --green-lt: #DCFCE7;
+    --red:      #DC2626;
+    --red-lt:   #FEE2E2;
+    --orange:   #EA580C;
+    --gray-50:  #F9FAFB;
+    --gray-100: #F3F4F6;
+    --gray-200: #E5E7EB;
+    --gray-400: #9CA3AF;
+    --gray-600: #4B5563;
+    --gray-800: #1F2937;
+    --white:    #FFFFFF;
+    --shadow:   0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06);
+    --shadow-md:0 4px 6px rgba(0,0,0,.07), 0 2px 4px rgba(0,0,0,.06);
+    --radius:   10px;
+    --radius-sm:6px;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--gray-50);
+    color: var(--gray-800);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ─────────────────────────────────────────── */
+  header {
+    background: var(--blue);
+    color: var(--white);
+    padding: 0 24px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: var(--shadow);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  header .logo {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -.3px;
+  }
+  header .logo span { opacity: .75; font-weight: 400; }
+  header .badge {
+    background: rgba(255,255,255,.2);
+    border-radius: 20px;
+    padding: 2px 10px;
+    font-size: 12px;
+  }
+  header .spacer { flex: 1; }
+  header .store-pill {
+    background: rgba(255,255,255,.15);
+    border: 1px solid rgba(255,255,255,.25);
+    border-radius: 20px;
+    padding: 4px 14px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--green); display:inline-block; }
+  .dot.red { background: var(--red); }
+
+  /* ── Layout ──────────────────────────────────────────── */
+  .layout { display: flex; flex: 1; }
+
+  /* ── Sidebar ─────────────────────────────────────────── */
+  .sidebar {
+    width: 270px;
+    min-height: calc(100vh - 56px);
+    background: var(--white);
+    border-right: 1px solid var(--gray-200);
+    padding: 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .sidebar h3 {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    color: var(--gray-400);
+    padding: 0 4px;
+  }
+  .store-list { display: flex; flex-direction: column; gap: 6px; }
+  .store-card {
+    border: 1.5px solid var(--gray-200);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: all .15s;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .store-card:hover { border-color: var(--blue); background: var(--blue-lt); }
+  .store-card.active { border-color: var(--blue); background: var(--blue-lt); }
+  .store-card .store-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    background: var(--blue);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .store-card .store-info { flex: 1; min-width: 0; }
+  .store-card .store-info strong {
+    display: block;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .store-card .store-info small { color: var(--gray-400); font-size: 11px; }
+  .store-card .store-status { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .store-card .store-status.ok  { background: var(--green); }
+  .store-card .store-status.err { background: var(--red); }
+
+  .btn-connect {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: var(--blue);
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s;
+    width: 100%;
+    text-decoration: none;
+  }
+  .btn-connect:hover { background: var(--blue-dk); }
+
+  /* ── Main Content ────────────────────────────────────── */
+  .main {
+    flex: 1;
+    padding: 28px;
+    overflow-y: auto;
+    max-width: 960px;
+  }
+
+  /* ── Empty States ────────────────────────────────────── */
+  .empty-state {
+    text-align: center;
+    padding: 80px 20px;
+    color: var(--gray-400);
+  }
+  .empty-state .icon { font-size: 48px; margin-bottom: 16px; }
+  .empty-state h2 { font-size: 20px; color: var(--gray-600); margin-bottom: 8px; }
+  .empty-state p { font-size: 14px; max-width: 380px; margin: 0 auto 24px; }
+
+  /* ── Page Header ─────────────────────────────────────── */
+  .page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    gap: 16px;
+  }
+  .page-header h1 { font-size: 22px; font-weight: 700; }
+  .page-header p  { font-size: 13px; color: var(--gray-600); margin-top: 4px; }
+
+  /* ── Buttons ──────────────────────────────────────────── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 9px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .15s;
+    white-space: nowrap;
+  }
+  .btn-primary   { background: var(--blue); color: white; }
+  .btn-primary:hover { background: var(--blue-dk); }
+  .btn-danger    { background: var(--red-lt); color: var(--red); }
+  .btn-danger:hover  { background: #fca5a5; }
+  .btn-ghost     { background: transparent; color: var(--gray-600); border: 1.5px solid var(--gray-200); }
+  .btn-ghost:hover   { background: var(--gray-100); }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+  /* ── Rule Cards ───────────────────────────────────────── */
+  .rules-list { display: flex; flex-direction: column; gap: 16px; }
+  .rule-card {
+    background: var(--white);
+    border: 1.5px solid var(--gray-200);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+    transition: box-shadow .15s;
+  }
+  .rule-card:hover { box-shadow: var(--shadow-md); }
+  .rule-card.inactive { opacity: .6; }
+
+  .rule-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .rule-header h3 { font-size: 15px; font-weight: 700; flex: 1; }
+  .rule-header .rule-target {
+    font-size: 12px;
+    background: var(--blue-lt);
+    color: var(--blue);
+    border-radius: 20px;
+    padding: 2px 10px;
+    font-weight: 600;
+  }
+  .rule-header .rule-target.cat { background: #FEF3C7; color: #92400E; }
+  .rule-header .rule-target.all { background: var(--green-lt); color: var(--green); }
+
+  /* Toggle switch */
+  .toggle-wrap { display:flex; align-items:center; gap:8px; }
+  .toggle {
+    position: relative;
+    width: 40px;
+    height: 22px;
+    cursor: pointer;
+  }
+  .toggle input { opacity:0; width:0; height:0; }
+  .toggle-slider {
+    position: absolute;
+    inset: 0;
+    background: var(--gray-200);
+    border-radius: 11px;
+    transition: .2s;
+  }
+  .toggle-slider::before {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: white;
+    top: 3px;
+    left: 3px;
+    transition: .2s;
+    box-shadow: var(--shadow);
+  }
+  input:checked + .toggle-slider { background: var(--blue); }
+  input:checked + .toggle-slider::before { transform: translateX(18px); }
+
+  /* Scales table */
+  .scales-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .scale-box {
+    border: 1.5px solid var(--gray-200);
+    border-radius: var(--radius-sm);
+    padding: 10px;
+    text-align: center;
+  }
+  .scale-box.has-discount {
+    border-color: var(--blue);
+    background: var(--blue-lt);
+  }
+  .scale-box .scale-qty  { font-size: 11px; color: var(--gray-400); margin-bottom: 4px; }
+  .scale-box .scale-disc {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--gray-400);
+  }
+  .scale-box.has-discount .scale-disc { color: var(--blue); }
+
+  .rule-actions { display: flex; gap: 8px; }
+
+  /* ── Modal ────────────────────────────────────────────── */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.45);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s;
+  }
+  .overlay.open { opacity: 1; pointer-events: all; }
+
+  .modal {
+    background: var(--white);
+    border-radius: var(--radius);
+    width: 100%;
+    max-width: 680px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,.25);
+    transform: translateY(20px);
+    transition: transform .2s;
+  }
+  .overlay.open .modal { transform: translateY(0); }
+
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--gray-200);
+    position: sticky;
+    top: 0;
+    background: var(--white);
+    z-index: 1;
+  }
+  .modal-header h2 { font-size: 18px; font-weight: 700; }
+  .modal-close {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: var(--gray-100);
+    cursor: pointer;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--gray-600);
+  }
+  .modal-close:hover { background: var(--gray-200); }
+
+  .modal-body { padding: 24px; }
+  .modal-footer {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    padding: 16px 24px;
+    border-top: 1px solid var(--gray-200);
+    position: sticky;
+    bottom: 0;
+    background: var(--white);
+  }
+
+  /* Form */
+  .form-group { margin-bottom: 20px; }
+  .form-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--gray-800);
+  }
+  .form-group .hint { font-size: 11px; color: var(--gray-400); margin-top: 4px; }
+
+  input[type="text"], input[type="number"], select, textarea {
+    width: 100%;
+    border: 1.5px solid var(--gray-200);
+    border-radius: var(--radius-sm);
+    padding: 9px 12px;
+    font-size: 14px;
+    color: var(--gray-800);
+    background: var(--white);
+    outline: none;
+    transition: border-color .15s;
+    font-family: inherit;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--blue); }
+
+  .radio-group { display: flex; gap: 10px; }
+  .radio-opt {
+    flex: 1;
+    border: 1.5px solid var(--gray-200);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: all .15s;
+  }
+  .radio-opt:hover { border-color: var(--blue); background: var(--blue-lt); }
+  .radio-opt input { width: auto; }
+  .radio-opt span { font-size: 13px; font-weight: 600; }
+  .radio-opt small { font-size: 11px; color: var(--gray-400); display: block; }
+  .radio-opt.selected { border-color: var(--blue); background: var(--blue-lt); }
+
+  /* Multi-select */
+  .multi-select-box {
+    border: 1.5px solid var(--gray-200);
+    border-radius: var(--radius-sm);
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .multi-select-search {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--gray-200);
+    position: sticky;
+    top: 0;
+    background: var(--white);
+  }
+  .multi-select-search input {
+    border: 1px solid var(--gray-200);
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+  .ms-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background .1s;
+  }
+  .ms-item:hover { background: var(--gray-50); }
+  .ms-item.selected { background: var(--blue-lt); }
+  .ms-item input[type="checkbox"] { width: auto; }
+  .selected-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .tag {
+    background: var(--blue-lt);
+    color: var(--blue);
+    border-radius: 20px;
+    padding: 3px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+  }
+  .tag:hover { background: #c7d7f7; }
+
+  /* Scales editor */
+  .scales-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .scale-row {
+    display: grid;
+    grid-template-columns: 28px 1fr 1fr 1fr;
+    gap: 8px;
+    align-items: center;
+    background: var(--gray-50);
+    border: 1.5px solid var(--gray-200);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+  }
+  .scale-row .scale-num {
+    width: 28px;
+    height: 28px;
+    background: var(--blue);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .scale-row input { padding: 7px 10px; font-size: 13px; }
+  .scale-row .field { }
+  .scale-row .field label { font-size: 10px; color: var(--gray-400); text-transform: uppercase; margin-bottom: 3px; display: block; }
+  .scale-row .pct-wrap { position: relative; }
+  .scale-row .pct-wrap input { padding-right: 28px; }
+  .scale-row .pct-symbol {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--gray-400);
+    font-size: 13px;
+    pointer-events: none;
+  }
+  .scale-row .hint-inf { font-size: 11px; color: var(--gray-400); text-align: center; }
+
+  /* Alert */
+  .alert {
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+    font-size: 13px;
+    margin-bottom: 20px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .alert-info  { background: var(--blue-lt); color: #1e40af; }
+  .alert-warn  { background: #FEF3C7; color: #92400E; }
+  .alert-success { background: var(--green-lt); color: #14532d; }
+  .alert-icon { font-size: 16px; flex-shrink: 0; }
+
+  /* Loading */
+  .loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 40px;
+    color: var(--gray-400);
+    font-size: 14px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner {
+    width: 20px; height: 20px;
+    border: 2px solid var(--gray-200);
+    border-top-color: var(--blue);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+
+  /* Toast */
+  #toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--gray-800);
+    color: white;
+    padding: 12px 20px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 600;
+    z-index: 999;
+    transform: translateY(20px);
+    opacity: 0;
+    transition: all .3s;
+    pointer-events: none;
+    max-width: 320px;
+  }
+  #toast.show { transform: translateY(0); opacity: 1; }
+  #toast.success { background: var(--green); }
+  #toast.error   { background: var(--red); }
+</style>
+</head>
+<body>
+
+<!-- ══ HEADER ═════════════════════════════════════════ -->
+<header>
+  <div class="logo">🏷️ Descuentos <span>por Cantidad</span></div>
+  <div class="badge">Tienda Nube</div>
+  <div class="spacer"></div>
+  <div id="headerStore" style="display:none" class="store-pill">
+    <span class="dot" id="headerDot"></span>
+    <span id="headerStoreName">—</span>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- ══ SIDEBAR ══════════════════════════════════════ -->
+  <aside class="sidebar">
+    <h3>Mis Tiendas</h3>
+    <div id="storeList" class="store-list">
+      <div class="loading"><div class="spinner"></div> Cargando...</div>
+    </div>
+    <a href="/auth/install" class="btn-connect">
+      ＋ Conectar Tienda
+    </a>
+  </aside>
+
+  <!-- ══ MAIN ══════════════════════════════════════════ -->
+  <main class="main" id="mainArea">
+    <div class="empty-state">
+      <div class="icon">🏪</div>
+      <h2>Seleccioná una tienda</h2>
+      <p>Conectá tu tienda de Tienda Nube para empezar a configurar tus reglas de descuento por volumen.</p>
+      <a href="/auth/install" class="btn btn-primary">Conectar mi tienda</a>
+    </div>
+  </main>
+
+</div>
+
+<!-- ══ MODAL – Nueva / Editar Regla ═══════════════════ -->
+<div id="overlay" class="overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modalTitle">Nueva Regla de Descuento</h2>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <div class="alert alert-info">
+        <span class="alert-icon">ℹ️</span>
+        <div>
+          Los descuentos se aplican automáticamente en el carrito según la cantidad de unidades compradas.
+          La escala 1 suele ser precio lleno (0%).
+        </div>
+      </div>
+
+      <!-- Nombre -->
+      <div class="form-group">
+        <label>Nombre de la regla</label>
+        <input type="text" id="f-name" placeholder="Ej: Descuento por volumen general" />
+      </div>
+
+      <!-- Target type -->
+      <div class="form-group">
+        <label>Aplicar a</label>
+        <div class="radio-group">
+          <label class="radio-opt" id="opt-all" onclick="setTargetType('all')">
+            <input type="radio" name="target" value="all" checked />
+            <div>
+              <span>🌐 Todos los productos</span>
+              <small>Aplica a cualquier producto</small>
+            </div>
+          </label>
+          <label class="radio-opt" id="opt-products" onclick="setTargetType('products')">
+            <input type="radio" name="target" value="products" />
+            <div>
+              <span>📦 Productos específicos</span>
+              <small>Elegí productos puntales</small>
+            </div>
+          </label>
+          <label class="radio-opt" id="opt-categories" onclick="setTargetType('categories')">
+            <input type="radio" name="target" value="categories" />
+            <div>
+              <span>🗂️ Categorías</span>
+              <small>Aplica a categorías enteras</small>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Selector de productos -->
+      <div id="selectorArea" style="display:none" class="form-group">
+        <label id="selectorLabel">Productos</label>
+        <div class="multi-select-box">
+          <div class="multi-select-search">
+            <input type="text" id="selectorSearch" placeholder="Buscar..." oninput="filterSelector()" />
+          </div>
+          <div id="selectorItems"></div>
+        </div>
+        <div id="selectedTags" class="selected-tags"></div>
+        <div class="hint" id="selectedCount">0 seleccionados</div>
+      </div>
+
+      <!-- Escalas -->
+      <div class="form-group">
+        <label>Escalas de descuento (5 niveles)</label>
+        <div class="hint" style="margin-bottom:10px">
+          Cantidad mínima → máxima y porcentaje de descuento. Dejá el máximo vacío en la última escala para que aplique a "X o más".
+        </div>
+        <div class="scales-editor" id="scalesEditor">
+          <!-- Generado por JS -->
+        </div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveRule()">💾 Guardar Regla</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════════════
+//  Estado global
+// ════════════════════════════════════════════════════
+let currentStore = null;
+let allStores    = [];
+let selectorData = [];          // productos o categorías para el selector
+let selectedIds  = new Set();
+let targetType   = 'all';
+let editingRuleId = null;
+
+const DEFAULT_SCALES = [
+  { min: 1,  max: 1,  pct: 0    },
+  { min: 2,  max: 4,  pct: 4.5  },
+  { min: 5,  max: 9,  pct: 8    },
+  { min: 10, max: 19, pct: 12   },
+  { min: 20, max: null, pct: 15 }
+];
+
+// ════════════════════════════════════════════════════
+//  Init
+// ════════════════════════════════════════════════════
+async function init() {
+  await loadStores();
+
+  // Si viene ?store=xxx en la URL, seleccionar automáticamente
+  const params = new URLSearchParams(location.search);
+  if (params.get('connected') === '1') toast('✅ Tienda conectada exitosamente', 'success');
+
+  const storeParam = params.get('store');
+  if (storeParam) selectStore(storeParam);
+  else if (allStores.length === 1) selectStore(allStores[0].store_id);
+}
+
+// ════════════════════════════════════════════════════
+//  Tiendas
+// ════════════════════════════════════════════════════
+async function loadStores() {
+  try {
+    const res = await fetch('/api/stores');
+    allStores = await res.json();
+    renderStoreList();
+  } catch (e) {
+    document.getElementById('storeList').innerHTML =
+      '<div style="color:var(--red);font-size:13px;padding:8px">Error al cargar tiendas</div>';
+  }
+}
+
+function renderStoreList() {
+  const el = document.getElementById('storeList');
+  if (allStores.length === 0) {
+    el.innerHTML = '<div style="font-size:13px;color:var(--gray-400);padding:8px">No hay tiendas conectadas</div>';
+    return;
+  }
+  el.innerHTML = allStores.map(s => `
+    <div class="store-card ${s.store_id === currentStore ? 'active' : ''}"
+         onclick="selectStore('${s.store_id}')">
+      <div class="store-icon">🏪</div>
+      <div class="store-info">
+        <strong>${s.store_name || 'Tienda #' + s.store_id}</strong>
+        <small>ID: ${s.store_id}</small>
+      </div>
+      <div class="store-status ${s.promotion_id ? 'ok' : 'err'}"></div>
+    </div>
+  `).join('');
+}
+
+async function selectStore(storeId) {
+  currentStore = storeId;
+  renderStoreList();
+
+  // Header
+  const store = allStores.find(s => s.store_id === storeId);
+  document.getElementById('headerStore').style.display = 'flex';
+  document.getElementById('headerStoreName').textContent = store?.store_name || `Tienda #${storeId}`;
+  document.getElementById('headerDot').className = 'dot' + (store?.promotion_id ? '' : ' red');
+
+  await loadRules();
+}
+
+// ════════════════════════════════════════════════════
+//  Reglas
+// ════════════════════════════════════════════════════
+async function loadRules() {
+  document.getElementById('mainArea').innerHTML = `
+    <div class="loading"><div class="spinner"></div> Cargando reglas...</div>
+  `;
+
+  try {
+    const res   = await fetch(`/api/rules/${currentStore}`);
+    const rules = await res.json();
+    renderRules(rules);
+  } catch (e) {
+    document.getElementById('mainArea').innerHTML =
+      `<div class="alert alert-warn"><span class="alert-icon">⚠️</span> Error al cargar reglas: ${e.message}</div>`;
+  }
+}
+
+function renderRules(rules) {
+  const store = allStores.find(s => s.store_id === currentStore);
+
+  let warningHtml = '';
+  if (!store?.promotion_id) {
+    warningHtml = `
+      <div class="alert alert-warn">
+        <span class="alert-icon">⚠️</span>
+        <div>
+          <strong>Promoción no registrada</strong> — Reconectá la tienda para registrar el callback de descuentos.
+          <br><a href="/auth/install" style="color:inherit;font-weight:700">Reconectar →</a>
+        </div>
+      </div>`;
+  }
+
+  const headerHtml = `
+    <div class="page-header">
+      <div>
+        <h1>Reglas de Descuento</h1>
+        <p>${rules.length} regla${rules.length !== 1 ? 's' : ''} configurada${rules.length !== 1 ? 's' : ''} para esta tienda</p>
+      </div>
+      <button class="btn btn-primary" onclick="openNewRule()">＋ Nueva Regla</button>
+    </div>
+    ${warningHtml}
+  `;
+
+  if (rules.length === 0) {
+    document.getElementById('mainArea').innerHTML = headerHtml + `
+      <div class="empty-state" style="padding:60px 20px">
+        <div class="icon">📋</div>
+        <h2>Sin reglas todavía</h2>
+        <p>Creá tu primera regla de descuento por cantidad para esta tienda.</p>
+        <button class="btn btn-primary" onclick="openNewRule()">＋ Nueva Regla</button>
+      </div>
+    `;
+    return;
+  }
+
+  const cardsHtml = rules.map(r => renderRuleCard(r)).join('');
+  document.getElementById('mainArea').innerHTML = headerHtml + `<div class="rules-list">${cardsHtml}</div>`;
+}
+
+function qtyLabel(min, max) {
+  if (max === null || max === undefined) return `${min}+`;
+  if (min === max) return `${min}`;
+  return `${min}–${max}`;
+}
+
+function renderRuleCard(rule) {
+  const scales = Array.isArray(rule.scales) ? rule.scales : [
+    { min: rule.s1_min, max: rule.s1_max, pct: rule.s1_pct },
+    { min: rule.s2_min, max: rule.s2_max, pct: rule.s2_pct },
+    { min: rule.s3_min, max: rule.s3_max, pct: rule.s3_pct },
+    { min: rule.s4_min, max: rule.s4_max, pct: rule.s4_pct },
+    { min: rule.s5_min, max: rule.s5_max, pct: rule.s5_pct }
+  ];
+
+  const targetBadge = rule.target_type === 'all'
+    ? '<span class="rule-target all">Todos los productos</span>'
+    : rule.target_type === 'products'
+      ? `<span class="rule-target">📦 ${rule.target_ids.length} producto${rule.target_ids.length !== 1 ? 's' : ''}</span>`
+      : `<span class="rule-target cat">🗂️ ${rule.target_ids.length} categoría${rule.target_ids.length !== 1 ? 's' : ''}</span>`;
+
+  const scalesHtml = scales.map((s, i) => `
+    <div class="scale-box ${s.pct > 0 ? 'has-discount' : ''}">
+      <div class="scale-qty">× ${qtyLabel(s.min, s.max)}</div>
+      <div class="scale-disc">${s.pct > 0 ? s.pct + '%' : '—'}</div>
+    </div>
+  `).join('');
+
+  return `
+    <div class="rule-card ${rule.active ? '' : 'inactive'}" id="rule-${rule.id}">
+      <div class="rule-header">
+        <h3>${rule.name}</h3>
+        ${targetBadge}
+        <div class="toggle-wrap">
+          <label class="toggle" title="${rule.active ? 'Desactivar' : 'Activar'}">
+            <input type="checkbox" ${rule.active ? 'checked' : ''} onchange="toggleRule(${rule.id}, this)" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+      <div class="scales-grid">${scalesHtml}</div>
+      <div class="rule-actions">
+        <button class="btn btn-ghost btn-sm" onclick="openEditRule(${rule.id})">✏️ Editar</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteRule(${rule.id})">🗑️ Eliminar</button>
+      </div>
+    </div>
+  `;
+}
+
+// ════════════════════════════════════════════════════
+//  Modal – Nueva / Editar Regla
+// ════════════════════════════════════════════════════
+function openNewRule() {
+  editingRuleId = null;
+  document.getElementById('modalTitle').textContent = 'Nueva Regla de Descuento';
+  resetModal();
+  buildScalesEditor(DEFAULT_SCALES);
+  openModal();
+}
+
+async function openEditRule(id) {
+  editingRuleId = id;
+  document.getElementById('modalTitle').textContent = 'Editar Regla';
+  resetModal();
+
+  try {
+    const res   = await fetch(`/api/rules/${currentStore}`);
+    const rules = await res.json();
+    const rule  = rules.find(r => r.id === id);
+    if (!rule) return;
+
+    document.getElementById('f-name').value = rule.name;
+
+    const scales = Array.isArray(rule.scales) ? rule.scales : [
+      { min: rule.s1_min, max: rule.s1_max, pct: rule.s1_pct },
+      { min: rule.s2_min, max: rule.s2_max, pct: rule.s2_pct },
+      { min: rule.s3_min, max: rule.s3_max, pct: rule.s3_pct },
+      { min: rule.s4_min, max: rule.s4_max, pct: rule.s4_pct },
+      { min: rule.s5_min, max: rule.s5_max, pct: rule.s5_pct }
+    ];
+    buildScalesEditor(scales);
+
+    setTargetType(rule.target_type);
+    selectedIds = new Set(rule.target_ids.map(String));
+
+    if (rule.target_type !== 'all') {
+      await loadSelectorData(rule.target_type);
+      renderSelectorItems();
+      renderTags();
+    }
+  } catch (e) {
+    toast('Error cargando regla: ' + e.message, 'error');
+  }
+
+  openModal();
+}
+
+function resetModal() {
+  document.getElementById('f-name').value = '';
+  setTargetType('all');
+  selectedIds = new Set();
+  document.getElementById('selectedTags').innerHTML = '';
+  document.getElementById('selectorItems').innerHTML = '';
+  document.getElementById('selectorSearch').value = '';
+}
+
+function buildScalesEditor(scales) {
+  const html = scales.map((s, i) => `
+    <div class="scale-row">
+      <div class="scale-num">${i + 1}</div>
+      <div class="field">
+        <label>Desde</label>
+        <input type="number" id="s${i}-min" value="${s.min}" min="1" placeholder="Qty mín" />
+      </div>
+      <div class="field">
+        <label>Hasta</label>
+        ${i < 4
+          ? `<input type="number" id="s${i}-max" value="${s.max ?? ''}" min="1" placeholder="Qty máx" />`
+          : `<input type="number" id="s${i}-max" value="" min="1" placeholder="Sin límite (∞)" />`
+        }
+      </div>
+      <div class="field pct-wrap">
+        <label>Descuento</label>
+        <input type="number" id="s${i}-pct" value="${s.pct}" min="0" max="100" step="0.5" placeholder="0" />
+        <span class="pct-symbol">%</span>
+      </div>
+    </div>
+  `).join('');
+  document.getElementById('scalesEditor').innerHTML = html;
+}
+
+// ── Target type ─────────────────────────────────────
+async function setTargetType(type) {
+  targetType = type;
+  selectedIds = new Set();
+
+  // Resaltar opción seleccionada
+  ['all', 'products', 'categories'].forEach(t => {
+    document.getElementById('opt-' + t).classList.toggle('selected', t === type);
+    document.getElementById('opt-' + t).querySelector('input').checked = (t === type);
+  });
+
+  const area = document.getElementById('selectorArea');
+  if (type === 'all') {
+    area.style.display = 'none';
+    return;
+  }
+
+  area.style.display = 'block';
+  document.getElementById('selectorLabel').textContent =
+    type === 'products' ? 'Productos' : 'Categorías';
+
+  document.getElementById('selectorItems').innerHTML =
+    '<div class="loading"><div class="spinner"></div> Cargando...</div>';
+
+  await loadSelectorData(type);
+  renderSelectorItems();
+}
+
+async function loadSelectorData(type) {
+  const endpoint = type === 'products'
+    ? `/api/tn/${currentStore}/products`
+    : `/api/tn/${currentStore}/categories`;
+
+  const res  = await fetch(endpoint);
+  const data = await res.json();
+
+  // Normalizar
+  selectorData = data.map(item => ({
+    id:   String(item.id),
+    name: typeof item.name === 'object'
+      ? (item.name.es || item.name.pt || Object.values(item.name)[0])
+      : (item.name || `#${item.id}`)
+  }));
+}
+
+function filterSelector() {
+  renderSelectorItems(document.getElementById('selectorSearch').value.toLowerCase());
+}
+
+function renderSelectorItems(q = '') {
+  const el = document.getElementById('selectorItems');
+  const filtered = q
+    ? selectorData.filter(x => x.name.toLowerCase().includes(q))
+    : selectorData;
+
+  if (filtered.length === 0) {
+    el.innerHTML = '<div class="ms-item" style="color:var(--gray-400)">Sin resultados</div>';
+    return;
+  }
+
+  el.innerHTML = filtered.map(item => `
+    <div class="ms-item ${selectedIds.has(item.id) ? 'selected' : ''}"
+         onclick="toggleItem('${item.id}', '${item.name.replace(/'/g, "\\'")}')">
+      <input type="checkbox" ${selectedIds.has(item.id) ? 'checked' : ''} style="pointer-events:none" />
+      ${item.name}
+    </div>
+  `).join('');
+}
+
+function toggleItem(id, name) {
+  if (selectedIds.has(id)) selectedIds.delete(id);
+  else selectedIds.add(id);
+  renderSelectorItems(document.getElementById('selectorSearch').value.toLowerCase());
+  renderTags();
+}
+
+function renderTags() {
+  const el = document.getElementById('selectedTags');
+  const cnt = document.getElementById('selectedCount');
+  cnt.textContent = `${selectedIds.size} seleccionado${selectedIds.size !== 1 ? 's' : ''}`;
+  el.innerHTML = [...selectedIds].map(id => {
+    const item = selectorData.find(x => x.id === id);
+    const name = item ? item.name : id;
+    return `<div class="tag" onclick="toggleItem('${id}', '')">
+      ${name} <span>✕</span>
+    </div>`;
+  }).join('');
+}
+
+// ── Modal open/close ────────────────────────────────
+function openModal()  { document.getElementById('overlay').classList.add('open'); }
+function closeModal() { document.getElementById('overlay').classList.remove('open'); }
+document.getElementById('overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('overlay')) closeModal();
+});
+
+// ════════════════════════════════════════════════════
+//  Guardar Regla
+// ════════════════════════════════════════════════════
+async function saveRule() {
+  const name = document.getElementById('f-name').value.trim();
+  if (!name) { toast('Ingresá un nombre para la regla', 'error'); return; }
+
+  if (targetType !== 'all' && selectedIds.size === 0) {
+    toast(`Seleccioná al menos un ${targetType === 'products' ? 'producto' : 'categoría'}`, 'error');
+    return;
+  }
+
+  const scales = [];
+  for (let i = 0; i < 5; i++) {
+    const min = parseInt(document.getElementById(`s${i}-min`).value) || (i + 1);
+    const maxVal = document.getElementById(`s${i}-max`).value;
+    const max = maxVal === '' || maxVal === null ? null : parseInt(maxVal);
+    const pct = parseFloat(document.getElementById(`s${i}-pct`).value) || 0;
+    scales.push({ min, max, pct });
+  }
+
+  const payload = {
+    name,
+    target_type: targetType,
+    target_ids:  [...selectedIds],
+    scales,
+    active: 1
+  };
+
+  try {
+    let res;
+    if (editingRuleId) {
+      res = await fetch(`/api/rules/${editingRuleId}`, {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload)
+      });
+    } else {
+      res = await fetch(`/api/rules/${currentStore}`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload)
+      });
+    }
+
+    if (!res.ok) throw new Error(await res.text());
+
+    closeModal();
+    toast(editingRuleId ? '✅ Regla actualizada' : '✅ Regla creada', 'success');
+    await loadRules();
+  } catch (e) {
+    toast('Error: ' + e.message, 'error');
+  }
+}
+
+// ════════════════════════════════════════════════════
+//  Acciones de Regla
+// ════════════════════════════════════════════════════
+async function toggleRule(id, checkbox) {
+  try {
+    const res  = await fetch(`/api/rules/${id}/toggle`, { method: 'PATCH' });
+    const data = await res.json();
+    const card = document.getElementById('rule-' + id);
+    if (card) card.classList.toggle('inactive', !data.active);
+    toast(data.active ? '✅ Regla activada' : 'Regla desactivada', data.active ? 'success' : '');
+  } catch (e) {
+    checkbox.checked = !checkbox.checked; // revert
+    toast('Error: ' + e.message, 'error');
+  }
+}
+
+async function deleteRule(id) {
+  if (!confirm('¿Eliminar esta regla? Esta acción no se puede deshacer.')) return;
+  try {
+    await fetch(`/api/rules/${id}`, { method: 'DELETE' });
+    toast('🗑️ Regla eliminada');
+    await loadRules();
+  } catch (e) {
+    toast('Error: ' + e.message, 'error');
+  }
+}
+
+// ════════════════════════════════════════════════════
+//  Toast
+// ════════════════════════════════════════════════════
+let toastTimer;
+function toast(msg, type = '') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className   = 'show' + (type ? ' ' + type : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = ''; }, 3200);
+}
+
+// ════════════════════════════════════════════════════
+//  Arranque
+// ════════════════════════════════════════════════════
+init();
+</script>
+</body>
+</html>

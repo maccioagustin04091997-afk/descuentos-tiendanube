@@ -1,0 +1,20 @@
+{
+  "name": "descuentos-por-cantidad-tiendanube",
+  "version": "1.0.0",
+  "description": "App de descuentos por volumen para Tienda Nube",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "@railway/cli": "^4.36.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.3",
+    "localtunnel": "^2.0.2",
+    "node-fetch": "^2.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

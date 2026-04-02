@@ -171,6 +171,7 @@ app.get('/auth/callback', async (req, res) => {
 // ─── DISCOUNT CALLBACK ────────────────────────────────────────────────────────
 
 app.post('/discount/callback', (req, res) => {
+  console.log('[callback-raw]', JSON.stringify(req.body));
   const { store_id, products, currency } = req.body;
   if (!store_id || !Array.isArray(products) || products.length === 0) return res.status(204).send();
 
@@ -212,8 +213,9 @@ app.post('/discount/callback', (req, res) => {
   }
 
   if (commands.length === 0) return res.status(204).send();
-  console.log(`[callback] store=${storeIdStr} commands=${commands.length}`);
-  res.json({ commands });
+  const respBody = { commands };
+  console.log(`[callback] store=${storeIdStr} commands=${commands.length} resp=${JSON.stringify(respBody)}`);
+  res.json(respBody);
 });
 
 // ─── API – TIENDAS ────────────────────────────────────────────────────────────

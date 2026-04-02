@@ -4,7 +4,7 @@
       "store_id": "4538420",
       "access_token": "4266a753b002c259c772d0bf4232c7d6901684e0",
       "store_name": "La Plaza Materiales",
-      "promotion_id": "b14841ed-0157-4f80-ae28-35c593f5d41e",
+      "promotion_id": "fd6e99e0-3dcf-47c8-b9dd-f30d3f51bdb2",
       "connected_at": "2026-04-02T22:44:58.741Z"
     }
   },
@@ -51,7 +51,7 @@
       "name": "Test Producto",
       "target_type": "products",
       "target_ids": [
-        "210516274"
+        "210519463"
       ],
       "scales": [
         {

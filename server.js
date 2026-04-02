@@ -331,4 +331,21 @@ app.listen(PORT, async () => {
   }
 
   console.log(`🔗  Callback URL: ${process.env.APP_URL || '(pendiente)'}/discount/callback\n`);
+
+  // Re-registrar callback URL en TN para todas las tiendas conectadas al arrancar
+  if (process.env.APP_URL && process.env.APP_URL !== 'PENDIENTE') {
+    const db = readDB();
+    for (const store of Object.values(db.stores)) {
+      if (!store.access_token || !store.promotion_id) continue;
+      try {
+        await tnFetch(store.store_id, '/discounts/callbacks', {
+          method: 'PUT',
+          body: JSON.stringify({ url: `${process.env.APP_URL}/discount/callback` })
+        });
+        console.log(`✅  Callback re-registrado para tienda ${store.store_id}`);
+      } catch (e) {
+        console.warn(`⚠️  No se pudo re-registrar callback para ${store.store_id}:`, e.message);
+      }
+    }
+  }
 });

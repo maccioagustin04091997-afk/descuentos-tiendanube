@@ -311,23 +311,28 @@ async function registerWidgetScript(storeId) {
   // TN requiere un script_id único provisto por el developer
   const myScriptId = `dcx-widget-${storeId}`;
 
-  // Intentar actualizar si ya existe, si no crear nuevo
   let res;
-  try {
-    // Intento PUT para actualizar script existente
-    res = await tnFetch(storeId, `/scripts/${myScriptId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ src: scriptUrl, event: 'onload', where: 'store' })
-    });
-    console.log(`[script] actualizado en tienda ${storeId}:`, JSON.stringify(res));
-  } catch (e) {
-    // Si no existe, crear con POST
+  // Intentar actualizar con PUT primero
+  const putRes = await tnFetch(storeId, `/scripts/${myScriptId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ src: scriptUrl, event: 'onload', where: 'store' })
+  });
+
+  // tnFetch no lanza error en 404, devuelve { code: 404 }
+  // Si PUT retornó error o 404 (script no existe), crear con POST
+  const putOk = putRes && !putRes.code && !putRes.error;
+  if (!putOk) {
+    console.log(`[script] PUT falló (${JSON.stringify(putRes)}), intentando POST...`);
     res = await tnFetch(storeId, '/scripts', {
       method: 'POST',
       body: JSON.stringify({ script_id: myScriptId, src: scriptUrl, event: 'onload', where: 'store' })
     });
     console.log(`[script] creado en tienda ${storeId}:`, JSON.stringify(res));
+  } else {
+    res = putRes;
+    console.log(`[script] actualizado en tienda ${storeId}:`, JSON.stringify(res));
   }
+
   const scriptId = res?.data?.id || res?.id || myScriptId;
   const db2 = readDB();
   db2.stores[storeId].script_id = String(scriptId);

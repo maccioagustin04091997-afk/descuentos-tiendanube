@@ -791,6 +791,38 @@ function renderRules(rules) {
       </div>`;
   }
 
+  const widgetScriptUrl = `https://app-production-5b3c.up.railway.app/widget/${currentStore}/widget.js`;
+  const widgetTag = `&lt;script src="${widgetScriptUrl}"&gt;&lt;/script&gt;`;
+  const widgetTagRaw = `<script src="${widgetScriptUrl}"></script>`;
+
+  const widgetHtml = `
+    <div class="card" style="margin-bottom:16px;border:1.5px solid #aad4f5;background:#eef6ff;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <span style="font-size:22px;">🏷️</span>
+        <div>
+          <h2 style="font-size:15px;font-weight:700;color:#1a3c5e;margin:0;">Widget de Descuentos en la Tienda</h2>
+          <p style="font-size:12px;color:#4B5563;margin:0;">Agregá este código en tu tema para mostrar la tabla de descuentos en las páginas de producto</p>
+        </div>
+      </div>
+      <div style="background:#1a3c5e;border-radius:6px;padding:12px 14px;display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <code style="flex:1;color:#7dd3fc;font-size:12px;font-family:monospace;word-break:break-all;">${widgetTag}</code>
+        <button onclick="navigator.clipboard.writeText('${widgetTagRaw.replace(/'/g,"\\'")}').then(()=>toast('✅ Código copiado','success'))"
+          style="background:#2563eb;color:#fff;border:none;padding:6px 12px;border-radius:5px;cursor:pointer;font-size:12px;white-space:nowrap;">
+          📋 Copiar
+        </button>
+      </div>
+      <details style="font-size:12px;color:#374151;">
+        <summary style="cursor:pointer;font-weight:600;color:#1a3c5e;margin-bottom:6px;">▶ Cómo instalarlo en Tienda Nube</summary>
+        <ol style="margin:8px 0 0 18px;line-height:1.8;">
+          <li>En el admin de TN → <strong>Mi cuenta → Diseño → Editar código</strong></li>
+          <li>Abrí el archivo <strong>base.html</strong> (o <code>product.html</code>)</li>
+          <li>Pegá el código arriba <strong>antes del cierre &lt;/body&gt;</strong></li>
+          <li>Guardá los cambios</li>
+        </ol>
+        <p style="margin-top:8px;color:#6B7280;">El widget se mostrará automáticamente en páginas de productos cuando la regla de descuentos esté activa.</p>
+      </details>
+    </div>`;
+
   const headerHtml = `
     <div class="page-header">
       <div>
@@ -800,6 +832,7 @@ function renderRules(rules) {
       <button class="btn btn-primary" onclick="openNewRule()">＋ Nueva Regla</button>
     </div>
     ${warningHtml}
+    ${widgetHtml}
   `;
 
   if (rules.length === 0) {

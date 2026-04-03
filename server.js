@@ -308,26 +308,30 @@ async function registerWidgetScript(storeId) {
   if (!store?.access_token) return;
 
   const scriptUrl = `${process.env.APP_URL}/widget/${storeId}/widget.js`;
+  // TN requiere un script_id único provisto por el developer
+  const myScriptId = `dcx-widget-${storeId}`;
 
-  // Eliminar scripts viejos de esta app si existen
-  if (store.script_id) {
-    try {
-      await tnFetch(storeId, `/scripts/${store.script_id}`, { method: 'DELETE' });
-    } catch {}
+  // Intentar actualizar si ya existe, si no crear nuevo
+  let res;
+  try {
+    // Intento PUT para actualizar script existente
+    res = await tnFetch(storeId, `/scripts/${myScriptId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ src: scriptUrl, event: 'onload', where: 'store' })
+    });
+    console.log(`[script] actualizado en tienda ${storeId}:`, JSON.stringify(res));
+  } catch (e) {
+    // Si no existe, crear con POST
+    res = await tnFetch(storeId, '/scripts', {
+      method: 'POST',
+      body: JSON.stringify({ script_id: myScriptId, src: scriptUrl, event: 'onload', where: 'store' })
+    });
+    console.log(`[script] creado en tienda ${storeId}:`, JSON.stringify(res));
   }
-
-  // Crear nuevo script
-  const res = await tnFetch(storeId, '/scripts', {
-    method: 'POST',
-    body: JSON.stringify({ src: scriptUrl, event: 'onload', where: 'store' })
-  });
-  console.log(`[script] registrado en tienda ${storeId}:`, JSON.stringify(res));
-  const scriptId = res?.data?.id || res?.id;
-  if (scriptId) {
-    const db2 = readDB();
-    db2.stores[storeId].script_id = String(scriptId);
-    writeDB(db2);
-  }
+  const scriptId = res?.data?.id || res?.id || myScriptId;
+  const db2 = readDB();
+  db2.stores[storeId].script_id = String(scriptId);
+  writeDB(db2);
 }
 
 // ─── WIDGET PÚBLICO ──────────────────────────────────────────────────────────

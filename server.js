@@ -21,9 +21,15 @@ const DB_FILE = path.join(__dirname, 'data.json');
 
 function readDB() {
   try {
-    if (fs.existsSync(DB_FILE)) return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+    if (fs.existsSync(DB_FILE)) {
+      const data = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+      // Migración: asegurar que shipping_rules exista
+      if (!data.shipping_rules) { data.shipping_rules = []; data.nextShippingRuleId = 1; }
+      if (!data.nextShippingRuleId) data.nextShippingRuleId = (data.shipping_rules.length + 1);
+      return data;
+    }
   } catch {}
-  return { stores: {}, rules: [], nextRuleId: 1 };
+  return { stores: {}, rules: [], nextRuleId: 1, shipping_rules: [], nextShippingRuleId: 1 };
 }
 
 function writeDB(data) {
@@ -288,6 +294,62 @@ app.delete('/api/rules/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// ─── API – REGLAS DE ENVÍO GRATIS ────────────────────────────────────────────
+
+app.get('/api/shipping-rules/:storeId', (req, res) => {
+  const db = readDB();
+  res.json((db.shipping_rules || []).filter(r => r.store_id === req.params.storeId));
+});
+
+app.post('/api/shipping-rules/:storeId', (req, res) => {
+  const { storeId } = req.params;
+  const { name, target_type, target_ids } = req.body;
+  if (!name || !target_type) return res.status(400).json({ error: 'Faltan campos' });
+
+  const db   = readDB();
+  const rule = {
+    id:          db.nextShippingRuleId++,
+    store_id:    storeId,
+    name,
+    target_type, // 'products' | 'categories' | 'all'
+    target_ids:  target_ids || [],
+    active:      true,
+    created_at:  new Date().toISOString()
+  };
+  db.shipping_rules.push(rule);
+  writeDB(db);
+  res.json({ id: rule.id });
+});
+
+app.put('/api/shipping-rules/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const { name, target_type, target_ids, active } = req.body;
+  const db  = readDB();
+  const idx = db.shipping_rules.findIndex(r => r.id === id);
+  if (idx === -1) return res.status(404).json({ error: 'No encontrada' });
+  db.shipping_rules[idx] = { ...db.shipping_rules[idx], name, target_type, target_ids: target_ids || [], active: !!active };
+  writeDB(db);
+  res.json({ ok: true });
+});
+
+app.patch('/api/shipping-rules/:id/toggle', (req, res) => {
+  const id   = Number(req.params.id);
+  const db   = readDB();
+  const rule = db.shipping_rules.find(r => r.id === id);
+  if (!rule) return res.status(404).json({ error: 'No encontrada' });
+  rule.active = !rule.active;
+  writeDB(db);
+  res.json({ active: rule.active });
+});
+
+app.delete('/api/shipping-rules/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const db = readDB();
+  db.shipping_rules = db.shipping_rules.filter(r => r.id !== id);
+  writeDB(db);
+  res.json({ ok: true });
+});
+
 // ─── PROXY – Productos y Categorías ──────────────────────────────────────────
 
 app.get('/api/tn/:storeId/products', async (req, res) => {
@@ -398,6 +460,36 @@ app.get('/api/public/product-discount/:storeId/:productId', (req, res) => {
   res.json({ applies: true, scales: rule.scales || [] });
 });
 
+// Verificar si un producto tiene envío gratis CABA/AMBA configurado
+// GET /api/public/product-shipping/:storeId/:productId?categories=id1,id2
+app.get('/api/public/product-shipping/:storeId/:productId', (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  const db   = readDB();
+  const rules = (db.shipping_rules || []).filter(r => r.store_id === req.params.storeId);
+  const categoryIds = req.query.categories
+    ? req.query.categories.split(',').map(s => s.trim()).filter(Boolean)
+    : [];
+
+  const active = rules.filter(r => r.active);
+  let found = null;
+
+  // Prioridad: producto > categoría > todos
+  for (const r of active) {
+    if (r.target_type === 'products' && r.target_ids.map(String).includes(String(req.params.productId))) { found = r; break; }
+  }
+  if (!found) {
+    for (const r of active) {
+      if (r.target_type === 'categories' && categoryIds.some(c => r.target_ids.map(String).includes(String(c)))) { found = r; break; }
+    }
+  }
+  if (!found) {
+    found = active.find(r => r.target_type === 'all') || null;
+  }
+
+  if (!found) return res.json({ free_shipping: false });
+  res.json({ free_shipping: true });
+});
+
 // Widget JS dinámico por tienda
 app.get('/widget/:storeId/widget.js', (req, res) => {
   res.header('Content-Type', 'application/javascript; charset=utf-8');
@@ -433,23 +525,79 @@ function buildWidgetScript(storeId, appUrl) {
     return [];
   }
 
+  function insertWidget(el) {
+    // Inserta el widget después del precio, o antes del botón comprar
+    var inserted = false;
+    var priceSelectors = [
+      '.product-price', '.prices', '.product-prices',
+      '[class*="product-price"]', '[class*="product__price"]',
+      '[class*="price-box"]', '.js-price-display'
+    ];
+    for (var i = 0; i < priceSelectors.length; i++) {
+      var anchor = document.querySelector(priceSelectors[i]);
+      if (anchor && anchor.parentNode) {
+        anchor.parentNode.insertBefore(el, anchor.nextSibling);
+        inserted = true; break;
+      }
+    }
+    if (!inserted) {
+      var cartBtn = document.querySelector(
+        'form[action*="/cart/add"], [class*="add-to-cart"], [class*="buy-button"], .buy-button'
+      );
+      if (cartBtn && cartBtn.parentNode) {
+        cartBtn.parentNode.insertBefore(el, cartBtn); inserted = true;
+      }
+    }
+    if (!inserted) {
+      var form = document.querySelector('form.product-form, form[action*="cart"]');
+      if (form) form.insertAdjacentElement('beforebegin', el);
+    }
+  }
+
   ready(function() {
     var productId = getProductId();
     if (!productId) return;
 
     var categoryIds = getCategoryIds();
-    var url = API + '/api/public/product-discount/' + STORE_ID + '/' + productId;
-    if (categoryIds.length > 0) url += '?categories=' + categoryIds.join(',');
+    var catParam = categoryIds.length > 0 ? '?categories=' + categoryIds.join(',') : '';
 
-    fetch(url)
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        if (!data.applies) return;
+    var urlDiscount = API + '/api/public/product-discount/' + STORE_ID + '/' + productId + catParam;
+    var urlShipping = API + '/api/public/product-shipping/' + STORE_ID + '/' + productId + catParam;
 
-        var scales = (data.scales || []).filter(function(s) { return s.pct > 0; });
-        if (scales.length === 0) return;
+    Promise.all([
+      fetch(urlDiscount).then(function(r) { return r.json(); }).catch(function() { return {}; }),
+      fetch(urlShipping).then(function(r) { return r.json(); }).catch(function() { return {}; })
+    ]).then(function(results) {
+      var discount = results[0];
+      var shipping = results[1];
 
-        // ── Construir HTML del widget ─────────────────────────────
+      var hasDiscount = discount.applies && Array.isArray(discount.scales) &&
+                        discount.scales.some(function(s) { return s.pct > 0; });
+      var hasShipping = !!shipping.free_shipping;
+
+      if (!hasDiscount && !hasShipping) return;
+
+      // ── Bloque de envío gratis ────────────────────────────────
+      var shippingHtml = '';
+      if (hasShipping) {
+        shippingHtml =
+          '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;' +
+          'background:#f0fdf4;border:1px solid #86efac;border-radius:6px;margin-bottom:' +
+          (hasDiscount ? '10px' : '0') + ';">' +
+            '<span style="font-size:18px;">\uD83D\uDE9A</span>' +
+            '<div>' +
+              '<div style="font-weight:700;font-size:13px;color:#166534;">Env\u00edo GRATIS</div>' +
+              '<div style="font-size:12px;color:#15803d;margin-top:1px;">' +
+                'A CABA, Gran Buenos Aires y AMBA' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+      }
+
+      // ── Tabla de descuentos ───────────────────────────────────
+      var discountHtml = '';
+      if (hasDiscount) {
+        var scales = discount.scales.filter(function(s) { return s.pct > 0; });
         var rows = '';
         scales.forEach(function(s) {
           var range = s.max ? (s.min + ' \u2013 ' + s.max + ' unidades') : (s.min + '+ unidades');
@@ -458,13 +606,7 @@ function buildWidgetScript(storeId, appUrl) {
             '<td style="padding:6px 10px;text-align:center;font-weight:700;color:#c0392b;font-size:13px;">' + s.pct + '% OFF</td>' +
             '</tr>';
         });
-
-        var widget = document.createElement('div');
-        widget.id = 'dcx-descuentos-widget';
-        widget.setAttribute('style',
-          'margin:14px 0;padding:14px 16px;background:#eef6ff;' +
-          'border:1px solid #aad4f5;border-radius:8px;font-family:inherit;');
-        widget.innerHTML =
+        discountHtml =
           '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">' +
             '<span style="font-size:16px;">\uD83C\uDFF7\uFE0F</span>' +
             '<span style="font-weight:700;font-size:14px;color:#1a3c5e;">Descuentos por cantidad</span>' +
@@ -476,37 +618,18 @@ function buildWidgetScript(storeId, appUrl) {
             '</tr></thead>' +
             '<tbody>' + rows + '</tbody>' +
           '</table>';
+      }
 
-        // ── Insertar en la página ─────────────────────────────────
-        var inserted = false;
-        var priceSelectors = [
-          '.product-price', '.prices', '.product-prices',
-          '[class*="product-price"]', '[class*="product__price"]',
-          '[class*="price-box"]', '.js-price-display'
-        ];
-        for (var s = 0; s < priceSelectors.length; s++) {
-          var el = document.querySelector(priceSelectors[s]);
-          if (el && el.parentNode) {
-            el.parentNode.insertBefore(widget, el.nextSibling);
-            inserted = true;
-            break;
-          }
-        }
-        if (!inserted) {
-          var cartBtn = document.querySelector(
-            'form[action*="/cart/add"], [class*="add-to-cart"], [class*="buy-button"], .buy-button'
-          );
-          if (cartBtn && cartBtn.parentNode) {
-            cartBtn.parentNode.insertBefore(widget, cartBtn);
-            inserted = true;
-          }
-        }
-        if (!inserted) {
-          var form = document.querySelector('form.product-form, form[action*="cart"]');
-          if (form) form.insertAdjacentElement('beforebegin', widget);
-        }
-      })
-      .catch(function() {});
+      // ── Montar widget contenedor ──────────────────────────────
+      var widget = document.createElement('div');
+      widget.id = 'dcx-descuentos-widget';
+      widget.setAttribute('style',
+        'margin:14px 0;padding:14px 16px;background:#eef6ff;' +
+        'border:1px solid #aad4f5;border-radius:8px;font-family:inherit;');
+      widget.innerHTML = shippingHtml + discountHtml;
+
+      insertWidget(widget);
+    });
   });
 })();
 `.trim();

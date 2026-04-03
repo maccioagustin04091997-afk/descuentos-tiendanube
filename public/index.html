@@ -658,7 +658,7 @@
       </div>
 
       <!-- Escalas -->
-      <div class="form-group">
+      <div class="form-group" id="scalesSection">
         <label>Escalas de descuento (5 niveles)</label>
         <div class="hint" style="margin-bottom:10px">
           Cantidad mínima → máxima y porcentaje de descuento. Dejá el máximo vacío en la última escala para que aplique a "X o más".
@@ -671,7 +671,7 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-      <button class="btn btn-primary" onclick="saveRule()">💾 Guardar Regla</button>
+      <button class="btn btn-primary" onclick="editingShippingRuleId !== null ? saveShippingRule() : saveRule()">💾 Guardar Regla</button>
     </div>
   </div>
 </div>
@@ -688,6 +688,7 @@ let selectorData = [];          // productos o categorías para el selector
 let selectedIds  = new Set();
 let targetType   = 'all';
 let editingRuleId = null;
+let editingShippingRuleId = null;
 
 const DEFAULT_SCALES = [
   { min: 1,  max: 1,  pct: 0    },
@@ -767,16 +768,21 @@ async function loadRules() {
   `;
 
   try {
-    const res   = await fetch(`/api/rules/${currentStore}`);
-    const rules = await res.json();
-    renderRules(rules);
+    const [rulesRes, shippingRes] = await Promise.all([
+      fetch(`/api/rules/${currentStore}`),
+      fetch(`/api/shipping-rules/${currentStore}`)
+    ]);
+    const rules         = await rulesRes.json();
+    const shippingRules = await shippingRes.json();
+    renderRules(rules, shippingRules);
   } catch (e) {
     document.getElementById('mainArea').innerHTML =
       `<div class="alert alert-warn"><span class="alert-icon">⚠️</span> Error al cargar reglas: ${e.message}</div>`;
   }
 }
 
-function renderRules(rules) {
+function renderRules(rules, shippingRules) {
+  shippingRules = shippingRules || [];
   const store = allStores.find(s => s.store_id === currentStore);
 
   let warningHtml = '';
@@ -824,6 +830,33 @@ function renderRules(rules) {
       </details>
     </div>`;
 
+  // ── Sección Envío Gratis ─────────────────────────────────────────────────
+  const shippingCardsHtml = shippingRules.length > 0
+    ? shippingRules.map(r => renderShippingRuleCard(r)).join('')
+    : `<div style="font-size:13px;color:var(--gray-400);padding:8px 0;">
+         Sin reglas de envío. Hacé clic en <strong>＋ Nueva Regla de Envío</strong> para agregar productos.
+       </div>`;
+
+  const shippingSection = `
+    <div class="card" style="margin-bottom:20px;border:1.5px solid #86efac;background:#f0fdf4;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:22px;">🚚</span>
+          <div>
+            <h2 style="font-size:15px;font-weight:700;color:#166534;margin:0;">Envío Gratis — CABA y GBA</h2>
+            <p style="font-size:12px;color:#4B5563;margin:4px 0 0;">
+              Productos que muestran el banner "Envío gratis a CABA, Gran Buenos Aires y AMBA"
+            </p>
+          </div>
+        </div>
+        <button class="btn btn-sm" onclick="openNewShippingRule()"
+          style="background:#166534;color:#fff;border:none;padding:7px 14px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap;">
+          ＋ Nueva Regla de Envío
+        </button>
+      </div>
+      <div id="shippingRulesList">${shippingCardsHtml}</div>
+    </div>`;
+
   const headerHtml = `
     <div class="page-header">
       <div>
@@ -833,6 +866,7 @@ function renderRules(rules) {
       <button class="btn btn-primary" onclick="openNewRule()">＋ Nueva Regla</button>
     </div>
     ${warningHtml}
+    ${shippingSection}
     ${widgetHtml}
   `;
 
@@ -840,7 +874,7 @@ function renderRules(rules) {
     document.getElementById('mainArea').innerHTML = headerHtml + `
       <div class="empty-state" style="padding:60px 20px">
         <div class="icon">📋</div>
-        <h2>Sin reglas todavía</h2>
+        <h2>Sin reglas de descuento todavía</h2>
         <p>Creá tu primera regla de descuento por cantidad para esta tienda.</p>
         <button class="btn btn-primary" onclick="openNewRule()">＋ Nueva Regla</button>
       </div>
@@ -850,6 +884,36 @@ function renderRules(rules) {
 
   const cardsHtml = rules.map(r => renderRuleCard(r)).join('');
   document.getElementById('mainArea').innerHTML = headerHtml + `<div class="rules-list">${cardsHtml}</div>`;
+}
+
+function renderShippingRuleCard(rule) {
+  const targetBadge = rule.target_type === 'all'
+    ? '<span class="rule-target all">Todos los productos</span>'
+    : rule.target_type === 'products'
+      ? `<span class="rule-target">📦 ${rule.target_ids.length} producto${rule.target_ids.length !== 1 ? 's' : ''}</span>`
+      : `<span class="rule-target cat">🗂️ ${rule.target_ids.length} categoría${rule.target_ids.length !== 1 ? 's' : ''}</span>`;
+
+  return `
+    <div class="rule-card ${rule.active ? '' : 'inactive'}" id="srule-${rule.id}"
+         style="border-left:3px solid #16a34a;margin-bottom:10px;">
+      <div class="rule-header">
+        <h3>${rule.name}</h3>
+        ${targetBadge}
+        <div class="toggle-wrap">
+          <label class="toggle" title="${rule.active ? 'Desactivar' : 'Activar'}">
+            <input type="checkbox" ${rule.active ? 'checked' : ''} onchange="toggleShippingRule(${rule.id}, this)" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+      <div style="font-size:12px;color:#15803d;margin:6px 0 10px;display:flex;align-items:center;gap:6px;">
+        🚚 <strong>Envío gratis</strong> · CABA, Gran Buenos Aires y AMBA
+      </div>
+      <div class="rule-actions">
+        <button class="btn btn-ghost btn-sm" onclick="openEditShippingRule(${rule.id})">✏️ Editar</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteShippingRule(${rule.id})">🗑️ Eliminar</button>
+      </div>
+    </div>`;
 }
 
 function qtyLabel(min, max) {
@@ -906,16 +970,22 @@ function renderRuleCard(rule) {
 // ════════════════════════════════════════════════════
 function openNewRule() {
   editingRuleId = null;
+  editingShippingRuleId = null;
   document.getElementById('modalTitle').textContent = 'Nueva Regla de Descuento';
   resetModal();
+  const ss = document.getElementById('scalesSection');
+  if (ss) ss.style.display = '';
   buildScalesEditor(DEFAULT_SCALES);
   openModal();
 }
 
 async function openEditRule(id) {
   editingRuleId = id;
+  editingShippingRuleId = null;
   document.getElementById('modalTitle').textContent = 'Editar Regla';
   resetModal();
+  const ss = document.getElementById('scalesSection');
+  if (ss) ss.style.display = '';
 
   try {
     const res   = await fetch(`/api/rules/${currentStore}`);
@@ -1159,6 +1229,88 @@ async function deleteRule(id) {
   } catch (e) {
     toast('Error: ' + e.message, 'error');
   }
+}
+
+// ════════════════════════════════════════════════════
+//  Reglas de Envío Gratis (CRUD)
+// ════════════════════════════════════════════════════
+function openNewShippingRule() {
+  editingShippingRuleId = null;
+  document.getElementById('modalTitle').textContent = 'Nueva Regla de Envío Gratis';
+  resetModal();
+  // Ocultar sección de escalas (no aplica para envío)
+  const scalesSection = document.getElementById('scalesSection');
+  if (scalesSection) scalesSection.style.display = 'none';
+  openModal();
+}
+
+async function openEditShippingRule(id) {
+  editingShippingRuleId = id;
+  document.getElementById('modalTitle').textContent = 'Editar Regla de Envío';
+  resetModal();
+  const scalesSection = document.getElementById('scalesSection');
+  if (scalesSection) scalesSection.style.display = 'none';
+  try {
+    const res   = await fetch(`/api/shipping-rules/${currentStore}`);
+    const rules = await res.json();
+    const rule  = rules.find(r => r.id === id);
+    if (!rule) throw new Error('Regla no encontrada');
+    document.getElementById('f-name').value = rule.name;
+    setTargetType(rule.target_type);
+    selectedIds = new Set(rule.target_ids.map(String));
+    if (rule.target_type !== 'all') await loadSelectorItems(rule.target_type);
+    renderSelectedTags();
+  } catch(e) { toast('Error cargando regla: ' + e.message, 'error'); }
+  openModal();
+}
+
+async function saveShippingRule() {
+  const name        = document.getElementById('f-name').value.trim();
+  const target_type = document.getElementById('f-target-type').value;
+  const target_ids  = [...selectedIds];
+
+  if (!name) { toast('Ingresá un nombre', 'error'); return; }
+  if (target_type !== 'all' && target_ids.length === 0) {
+    toast('Seleccioná al menos un producto o categoría', 'error'); return;
+  }
+
+  const body = { name, target_type, target_ids };
+  try {
+    if (editingShippingRuleId) {
+      await fetch(`/api/shipping-rules/${editingShippingRuleId}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...body, active: true })
+      });
+      toast('✅ Regla de envío actualizada', 'success');
+    } else {
+      await fetch(`/api/shipping-rules/${currentStore}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      toast('✅ Regla de envío creada', 'success');
+    }
+    closeModal();
+    await loadRules();
+  } catch(e) { toast('Error guardando: ' + e.message, 'error'); }
+}
+
+async function toggleShippingRule(id, checkbox) {
+  try {
+    const res  = await fetch(`/api/shipping-rules/${id}/toggle`, { method: 'PATCH' });
+    const data = await res.json();
+    const card = document.getElementById(`srule-${id}`);
+    if (card) card.className = `rule-card ${data.active ? '' : 'inactive'}`.trim();
+    toast(data.active ? '🚚 Regla de envío activada' : '🔕 Regla desactivada', data.active ? 'success' : 'info');
+  } catch(e) { checkbox.checked = !checkbox.checked; toast('Error: ' + e.message, 'error'); }
+}
+
+async function deleteShippingRule(id) {
+  if (!confirm('¿Eliminar esta regla de envío?')) return;
+  try {
+    await fetch(`/api/shipping-rules/${id}`, { method: 'DELETE' });
+    toast('🗑️ Regla eliminada', 'info');
+    await loadRules();
+  } catch(e) { toast('Error: ' + e.message, 'error'); }
 }
 
 // ════════════════════════════════════════════════════

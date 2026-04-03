@@ -359,7 +359,8 @@ app.get('/api/public/rules/:storeId', (req, res) => {
   res.json(rules);
 });
 
-// Verificar si un producto específico tiene descuento configurado
+// Verificar si un producto específico tiene descuento configurado EXPLÍCITAMENTE
+// (solo reglas de producto o categoría, NO el fallback "all")
 // GET /api/public/product-discount/:storeId/:productId?categories=id1,id2
 app.get('/api/public/product-discount/:storeId/:productId', (req, res) => {
   res.header('Access-Control-Allow-Origin', '*');
@@ -368,7 +369,19 @@ app.get('/api/public/product-discount/:storeId/:productId', (req, res) => {
   const categoryIds = req.query.categories
     ? req.query.categories.split(',').map(s => s.trim()).filter(Boolean)
     : [];
-  const rule = findRule(rules, req.params.productId, categoryIds);
+
+  // Solo aplica si hay regla explícita de producto o categoría
+  const active = rules.filter(r => r.active);
+  let rule = null;
+  for (const r of active) {
+    if (r.target_type === 'products' && r.target_ids.map(String).includes(String(req.params.productId))) { rule = r; break; }
+  }
+  if (!rule) {
+    for (const r of active) {
+      if (r.target_type === 'categories' && categoryIds.some(c => r.target_ids.map(String).includes(String(c)))) { rule = r; break; }
+    }
+  }
+
   if (!rule) return res.json({ applies: false });
   res.json({ applies: true, scales: rule.scales || [] });
 });

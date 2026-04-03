@@ -187,24 +187,25 @@ app.post('/discount/callback', (req, res) => {
     const lineItemId  = product.id ?? product.line_item_id;
     const productId   = product.product_id ?? product.id;
     const qty         = Number(product.quantity) || 0;
+    const unitPrice   = parseFloat(product.price) || 0;
     const categories  = Array.isArray(product.categories) ? product.categories : [];
     if (!lineItemId || qty === 0) continue;
 
     const rule        = findRule(rules, productId, categories);
     const discountPct = rule ? getDiscount(rule, qty) : 0;
 
-    if (discountPct > 0) {
+    if (discountPct > 0 && unitPrice > 0) {
+      // TN sólo acepta type "fixed" — calculamos el descuento fijo por unidad
+      const discountPerUnit = (unitPrice * discountPct / 100).toFixed(2);
       commands.push({
         command: 'create_or_update_discount',
         specs: {
           promotion_id: store.promotion_id,
           currency:     currency || 'ARS',
           display_text: {
-            'es-ar': `${discountPct}% OFF por volumen`,
-            'pt-br': `${discountPct}% OFF por volume`,
-            'en':    `${discountPct}% OFF volume discount`
+            'es-ar': `${discountPct}% OFF por volumen`
           },
-          line_items: [{ line_item: String(lineItemId), discount_specs: { type: 'percentage', amount: String(discountPct) } }]
+          line_items: [{ line_item: String(lineItemId), discount_specs: { type: 'fixed', amount: discountPerUnit } }]
         }
       });
     } else {

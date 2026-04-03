@@ -553,6 +553,7 @@
   #toast.show { transform: translateY(0); opacity: 1; }
   #toast.success { background: var(--green); }
   #toast.error   { background: var(--red); }
+  #toast.info    { background: var(--gray-600); }
 </style>
 </head>
 <body>
@@ -756,6 +757,75 @@ async function selectStore(storeId) {
   document.getElementById('headerDot').className = 'dot' + (store?.promotion_id ? '' : ' red');
 
   await loadRules();
+  loadShipping(); // async, no bloqueante
+}
+
+// ════════════════════════════════════════════════════
+//  Envío Gratis
+// ════════════════════════════════════════════════════
+async function loadShipping() {
+  const toggle = document.getElementById('shippingToggle');
+  const desc   = document.getElementById('shippingDesc');
+  const extra  = document.getElementById('shippingExtra');
+  const errEl  = document.getElementById('shippingError');
+  if (!toggle) return;
+
+  try {
+    const res  = await fetch(`/api/shipping/${currentStore}`);
+    const data = await res.json();
+
+    toggle.disabled = false;
+    toggle.checked  = data.enabled;
+
+    if (data.enabled && data.carrier_id) {
+      desc.textContent = `Activo · Carrier ID: ${data.carrier_id} · ${data.zones}`;
+      extra.style.display = 'block';
+      errEl.style.display = 'none';
+    } else if (data.enabled && !data.carrier_id) {
+      desc.textContent = 'Activo — pendiente de registrar carrier en TN (guardá y recargá)';
+      extra.style.display = 'none';
+    } else {
+      desc.textContent = `Desactivado · ${data.zones}`;
+      extra.style.display = 'none';
+      errEl.style.display = 'none';
+    }
+  } catch(e) {
+    if (desc) desc.textContent = 'Error al cargar estado del envío';
+  }
+}
+
+async function toggleShipping() {
+  const toggle = document.getElementById('shippingToggle');
+  const errEl  = document.getElementById('shippingError');
+  toggle.disabled = true;
+  errEl.style.display = 'none';
+
+  try {
+    const res  = await fetch(`/api/shipping/${currentStore}/toggle`, { method: 'PATCH' });
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(data.error || 'Error al cambiar estado');
+
+    // Si se activó y no había carrier, intentar registrarlo
+    if (data.enabled && !data.carrier_id) {
+      const reg = await fetch(`/api/shipping/${currentStore}/register`, { method: 'POST' });
+      const regData = await reg.json();
+      if (!reg.ok || !regData.carrier_id) {
+        errEl.textContent = '⚠️ No se pudo registrar el carrier en TN. Verificá que la tienda tenga el scope write_shipping. Puede requerir reconectar la tienda.';
+        errEl.style.display = 'block';
+      }
+    }
+
+    toast(data.enabled ? '🚚 Envío gratis activado' : '🔕 Envío gratis desactivado',
+          data.enabled ? 'success' : 'info');
+    await loadShipping();
+  } catch(e) {
+    errEl.textContent = `Error: ${e.message}`;
+    errEl.style.display = 'block';
+    toggle.checked = !toggle.checked; // revertir
+  } finally {
+    toggle.disabled = false;
+  }
 }
 
 // ════════════════════════════════════════════════════
@@ -824,6 +894,26 @@ function renderRules(rules) {
       </details>
     </div>`;
 
+  // Sección de envío (se actualiza async después de renderizar)
+  const shippingHtml = `
+    <div class="card" id="shippingCard" style="margin-bottom:16px;border:1.5px solid #d1fae5;background:#f0fdf4;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:22px;">🚚</span>
+        <div style="flex:1;">
+          <h2 style="font-size:15px;font-weight:700;color:#166534;margin:0;">Envío Gratis — CABA y AMBA</h2>
+          <p style="font-size:12px;color:#4B5563;margin:4px 0 0;" id="shippingDesc">Cargando estado...</p>
+        </div>
+        <label class="toggle" title="Activar / Desactivar envío gratis">
+          <input type="checkbox" id="shippingToggle" disabled onchange="toggleShipping()" />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div id="shippingExtra" style="margin-top:10px;font-size:12px;color:#166534;display:none;">
+        ✅ El carrier está registrado en Tienda Nube. Los compradores de CABA y los 24 partidos del GBA verán la opción de envío gratis al hacer checkout.
+      </div>
+      <div id="shippingError" style="margin-top:10px;font-size:12px;color:#DC2626;display:none;"></div>
+    </div>`;
+
   const headerHtml = `
     <div class="page-header">
       <div>
@@ -833,6 +923,7 @@ function renderRules(rules) {
       <button class="btn btn-primary" onclick="openNewRule()">＋ Nueva Regla</button>
     </div>
     ${warningHtml}
+    ${shippingHtml}
     ${widgetHtml}
   `;
 

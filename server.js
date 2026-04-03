@@ -56,6 +56,86 @@ async function tnFetch(storeId, endpoint, options = {}) {
   try { return JSON.parse(text); } catch { return text; }
 }
 
+// ─── ENVÍO GRATIS CABA / AMBA ─────────────────────────────────────────────────
+// Rangos de CP numérico (sistema antiguo 4 dígitos) para cada partido del GBA.
+// El nuevo CPA usa letra+4dígitos+3letras (ej: B1636ADB); extraemos los 4 dígitos.
+const CABA_RANGE   = [1000, 1499];   // viejo: 1000-1499  |  nuevo: C1xxx
+const AMBA_RANGES  = [               // 24 partidos del GBA
+  [1600, 1641],  // Vicente López
+  [1642, 1649],  // San Isidro / San Fernando
+  [1618, 1649],  // Tigre (comparte rangos)
+  [1650, 1679],  // General San Martín
+  [1660, 1679],  // Malvinas Argentinas / José C. Paz / San Miguel
+  [1682, 1699],  // Tres de Febrero
+  [1706, 1729],  // Morón
+  [1714, 1718],  // Ituzaingó
+  [1686, 1692],  // Hurlingham
+  [1722, 1749],  // Merlo
+  [1742, 1749],  // Moreno
+  [1752, 1779],  // La Matanza
+  [1741, 1760],  // Ezeiza (parte)
+  [1802, 1818],  // Esteban Echeverría / Presidente Perón
+  [1820, 1836],  // Lomas de Zamora / Lanús
+  [1840, 1866],  // Almirante Brown
+  [1868, 1878],  // Avellaneda
+  [1876, 1882],  // Quilmes
+  [1880, 1884],  // Berazategui
+  [1886, 1889],  // Florencio Varela
+];
+
+function isCabaAmba(zipcode) {
+  if (!zipcode) return false;
+  const z = String(zipcode).trim().toUpperCase().replace(/\s+/g, '');
+  // Nuevo CPA: C1xxx → CABA  |  B + 4 dígitos + 3 letras → extraer 4 dígitos
+  if (z.startsWith('C') && /^C1\d{3}/.test(z)) return true;   // CABA nuevo
+  if (z.startsWith('B')) {
+    const num = parseInt(z.slice(1, 5), 10);
+    if (!isNaN(num)) return AMBA_RANGES.some(([lo, hi]) => num >= lo && num <= hi);
+  }
+  // Código viejo (4 dígitos puros)
+  const num = parseInt(z, 10);
+  if (!isNaN(num) && z.replace(/\D/g, '').length === 4) {
+    if (num >= CABA_RANGE[0] && num <= CABA_RANGE[1]) return true; // CABA viejo
+    return AMBA_RANGES.some(([lo, hi]) => num >= lo && num <= hi);
+  }
+  return false;
+}
+
+// Registrar/actualizar carrier de envío en TN
+async function registerShippingCarrier(storeId) {
+  const db    = readDB();
+  const store = db.stores[storeId];
+  if (!store?.access_token) return;
+
+  const carrierData = {
+    name:         'Envío Gratis CABA y AMBA',
+    callback_url: `${process.env.APP_URL}/shipping/callback`,
+    types:        ['ship']
+  };
+
+  let carrierId = store.shipping_carrier_id;
+
+  if (carrierId) {
+    // Ya existe — actualizar
+    const upd = await tnFetch(storeId, `/shipping_carriers/${carrierId}`, {
+      method: 'PUT', body: JSON.stringify(carrierData)
+    });
+    console.log(`[shipping] carrier actualizado (${carrierId}):`, JSON.stringify(upd));
+  } else {
+    // Crear nuevo
+    const created = await tnFetch(storeId, '/shipping_carriers', {
+      method: 'POST', body: JSON.stringify(carrierData)
+    });
+    console.log(`[shipping] carrier creado:`, JSON.stringify(created));
+    carrierId = created?.id || created?.data?.id;
+    if (carrierId) {
+      const db2 = readDB();
+      db2.stores[storeId].shipping_carrier_id = String(carrierId);
+      writeDB(db2);
+    }
+  }
+}
+
 function findRule(rules, productId, categoryIds = []) {
   const active = rules.filter(r => r.active);
   for (const r of active) {
@@ -222,6 +302,81 @@ app.post('/discount/callback', (req, res) => {
   const respBody = { commands };
   console.log(`[callback] store=${storeIdStr} commands=${commands.length} resp=${JSON.stringify(respBody)}`);
   res.json(respBody);
+});
+
+// ─── SHIPPING CALLBACK ───────────────────────────────────────────────────────
+
+app.post('/shipping/callback', (req, res) => {
+  console.log('[shipping-callback]', JSON.stringify(req.body));
+  const storeId  = String(req.body?.store_id || '');
+  const zipcode  = req.body?.destination?.zipcode || req.body?.destination?.zip || '';
+
+  const db      = readDB();
+  const store   = db.stores[storeId];
+  const enabled = store?.shipping_free_enabled !== false; // activo por defecto si el carrier existe
+
+  if (!store || !enabled || !isCabaAmba(zipcode)) {
+    // No cubrimos esta zona — devolver array vacío para que TN use otros carriers
+    return res.json([]);
+  }
+
+  res.json([{
+    name:     'Envío Gratis',
+    code:     'envio_gratis_caba_amba',
+    price:    0,
+    currency: 'ARS',
+    type:     'ship',
+    min_delivery_date: new Date(Date.now() + 1*86400000).toISOString().split('T')[0],
+    max_delivery_date: new Date(Date.now() + 3*86400000).toISOString().split('T')[0],
+    phone_required:  false,
+    id_required:     false,
+    accept_mp_point: false
+  }]);
+});
+
+// ─── API – ENVÍO GRATIS ───────────────────────────────────────────────────────
+
+// GET estado del shipping free para una tienda
+app.get('/api/shipping/:storeId', (req, res) => {
+  const db    = readDB();
+  const store = db.stores[req.params.storeId];
+  if (!store) return res.status(404).json({ error: 'Tienda no encontrada' });
+  res.json({
+    enabled:    store.shipping_free_enabled !== false,
+    carrier_id: store.shipping_carrier_id || null,
+    zones:      'CABA + AMBA (24 partidos del GBA)'
+  });
+});
+
+// PATCH activar/desactivar envío gratis
+app.patch('/api/shipping/:storeId/toggle', async (req, res) => {
+  const db    = readDB();
+  const store = db.stores[req.params.storeId];
+  if (!store) return res.status(404).json({ error: 'Tienda no encontrada' });
+
+  const newState = !( store.shipping_free_enabled !== false );
+  store.shipping_free_enabled = newState;
+  writeDB(db);
+
+  // Si se activa por primera vez, registrar el carrier en TN
+  if (newState && !store.shipping_carrier_id) {
+    try { await registerShippingCarrier(req.params.storeId); }
+    catch(e) { console.error('[shipping] error registrando carrier:', e.message); }
+  }
+
+  res.json({ enabled: newState, carrier_id: store.shipping_carrier_id || null });
+});
+
+// POST forzar re-registro del carrier (útil tras re-auth)
+app.post('/api/shipping/:storeId/register', async (req, res) => {
+  try {
+    await registerShippingCarrier(req.params.storeId);
+    const db    = readDB();
+    const store = db.stores[req.params.storeId];
+    res.json({ ok: true, carrier_id: store?.shipping_carrier_id || null });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ─── API – TIENDAS ────────────────────────────────────────────────────────────

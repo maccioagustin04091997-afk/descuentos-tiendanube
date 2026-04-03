@@ -161,6 +161,11 @@ app.get('/auth/callback', async (req, res) => {
       }
     } catch (e) { console.error('Error registrando promoción:', e.message); }
 
+    // Registrar (o actualizar) el script del widget en la tienda
+    try {
+      await registerWidgetScript(storeIdStr);
+    } catch (e) { console.warn('No se pudo registrar script:', e.message); }
+
     res.redirect(`/?store=${storeIdStr}&connected=1`);
   } catch (err) {
     console.error('OAuth error:', err);
@@ -295,6 +300,162 @@ app.get('/api/tn/:storeId/categories', async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── REGISTRO DE SCRIPT EN TN ────────────────────────────────────────────────
+
+async function registerWidgetScript(storeId) {
+  const db    = readDB();
+  const store = db.stores[storeId];
+  if (!store?.access_token) return;
+
+  const scriptUrl = `${process.env.APP_URL}/widget/${storeId}/widget.js`;
+
+  // Eliminar scripts viejos de esta app si existen
+  if (store.script_id) {
+    try {
+      await tnFetch(storeId, `/scripts/${store.script_id}`, { method: 'DELETE' });
+    } catch {}
+  }
+
+  // Crear nuevo script
+  const res = await tnFetch(storeId, '/scripts', {
+    method: 'POST',
+    body: JSON.stringify({ src: scriptUrl, event: 'onload', where: 'store' })
+  });
+  console.log(`[script] registrado en tienda ${storeId}:`, JSON.stringify(res));
+  const scriptId = res?.data?.id || res?.id;
+  if (scriptId) {
+    const db2 = readDB();
+    db2.stores[storeId].script_id = String(scriptId);
+    writeDB(db2);
+  }
+}
+
+// ─── WIDGET PÚBLICO ──────────────────────────────────────────────────────────
+
+// Reglas públicas para el widget (sin auth, CORS abierto)
+app.get('/api/public/rules/:storeId', (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  const db = readDB();
+  const rules = db.rules.filter(r => r.store_id === req.params.storeId && r.active);
+  res.json(rules);
+});
+
+// Widget JS dinámico por tienda
+app.get('/widget/:storeId/widget.js', (req, res) => {
+  res.header('Content-Type', 'application/javascript; charset=utf-8');
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Cache-Control', 'public, max-age=60');
+  res.send(buildWidgetScript(req.params.storeId, process.env.APP_URL));
+});
+
+function buildWidgetScript(storeId, appUrl) {
+  return `
+(function() {
+  var STORE_ID = '${storeId}';
+  var API = '${appUrl}';
+
+  function ready(fn) {
+    if (document.readyState !== 'loading') fn();
+    else document.addEventListener('DOMContentLoaded', fn);
+  }
+
+  function getProductId() {
+    if (typeof LS !== 'undefined' && LS.product && LS.product.id) return String(LS.product.id);
+    var inp = document.querySelector('input[name="product_id"], [data-product-id]');
+    if (inp) return String(inp.value || inp.getAttribute('data-product-id') || '');
+    return null;
+  }
+
+  ready(function() {
+    var productId = getProductId();
+    if (!productId) return;
+
+    fetch(API + '/api/public/rules/' + STORE_ID)
+      .then(function(r) { return r.json(); })
+      .then(function(rules) {
+        if (!Array.isArray(rules) || rules.length === 0) return;
+
+        // Buscar regla aplicable: producto específico > general
+        var rule = null;
+        for (var i = 0; i < rules.length; i++) {
+          if (rules[i].target_type === 'products') {
+            var ids = (rules[i].target_ids || []).map(String);
+            if (ids.indexOf(productId) !== -1) { rule = rules[i]; break; }
+          }
+        }
+        if (!rule) {
+          for (var i = 0; i < rules.length; i++) {
+            if (rules[i].target_type === 'all') { rule = rules[i]; break; }
+          }
+        }
+        if (!rule) return;
+
+        var scales = (rule.scales || []).filter(function(s) { return s.pct > 0; });
+        if (scales.length === 0) return;
+
+        // ── Construir HTML del widget ─────────────────────────────
+        var rows = '';
+        scales.forEach(function(s) {
+          var range = s.max ? (s.min + ' \u2013 ' + s.max + ' unidades') : (s.min + '+ unidades');
+          rows += '<tr style="border-top:1px solid #d0e8fb;">' +
+            '<td style="padding:6px 10px;color:#333;font-size:13px;">' + range + '</td>' +
+            '<td style="padding:6px 10px;text-align:center;font-weight:700;color:#c0392b;font-size:13px;">' + s.pct + '% OFF</td>' +
+            '</tr>';
+        });
+
+        var widget = document.createElement('div');
+        widget.id = 'dcx-descuentos-widget';
+        widget.setAttribute('style',
+          'margin:14px 0;padding:14px 16px;background:#eef6ff;' +
+          'border:1px solid #aad4f5;border-radius:8px;font-family:inherit;');
+        widget.innerHTML =
+          '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">' +
+            '<span style="font-size:16px;">\uD83C\uDFF7\uFE0F</span>' +
+            '<span style="font-weight:700;font-size:14px;color:#1a3c5e;">Descuentos por cantidad</span>' +
+          '</div>' +
+          '<table style="width:100%;border-collapse:collapse;">' +
+            '<thead><tr style="background:#cce8fc;">' +
+              '<th style="padding:6px 10px;text-align:left;font-size:12px;color:#1a3c5e;font-weight:600;">CANTIDAD</th>' +
+              '<th style="padding:6px 10px;text-align:center;font-size:12px;color:#1a3c5e;font-weight:600;">DESCUENTO</th>' +
+            '</tr></thead>' +
+            '<tbody>' + rows + '</tbody>' +
+          '</table>';
+
+        // ── Insertar en la página ─────────────────────────────────
+        var inserted = false;
+        var priceSelectors = [
+          '.product-price', '.prices', '.product-prices',
+          '[class*="product-price"]', '[class*="product__price"]',
+          '[class*="price-box"]', '.js-price-display'
+        ];
+        for (var s = 0; s < priceSelectors.length; s++) {
+          var el = document.querySelector(priceSelectors[s]);
+          if (el && el.parentNode) {
+            el.parentNode.insertBefore(widget, el.nextSibling);
+            inserted = true;
+            break;
+          }
+        }
+        if (!inserted) {
+          var cartBtn = document.querySelector(
+            'form[action*="/cart/add"], [class*="add-to-cart"], [class*="buy-button"], .buy-button'
+          );
+          if (cartBtn && cartBtn.parentNode) {
+            cartBtn.parentNode.insertBefore(widget, cartBtn);
+            inserted = true;
+          }
+        }
+        if (!inserted) {
+          var form = document.querySelector('form.product-form, form[action*="cart"]');
+          if (form) form.insertAdjacentElement('beforebegin', widget);
+        }
+      })
+      .catch(function() {});
+  });
+})();
+`.trim();
+}
+
 // ─── WEBHOOKS PRIVACIDAD (requeridos por TN) ─────────────────────────────────
 
 app.post('/webhooks/privacy', (req, res) => {
@@ -335,7 +496,7 @@ app.listen(PORT, async () => {
 
   console.log(`🔗  Callback URL: ${process.env.APP_URL || '(pendiente)'}/discount/callback\n`);
 
-  // Re-registrar callback URL en TN para todas las tiendas conectadas al arrancar
+  // Re-registrar callback y script en TN para todas las tiendas al arrancar
   if (process.env.APP_URL && process.env.APP_URL !== 'PENDIENTE') {
     const db = readDB();
     for (const store of Object.values(db.stores)) {
@@ -348,6 +509,13 @@ app.listen(PORT, async () => {
         console.log(`✅  Callback re-registrado para tienda ${store.store_id}`);
       } catch (e) {
         console.warn(`⚠️  No se pudo re-registrar callback para ${store.store_id}:`, e.message);
+      }
+      // Re-registrar widget script
+      try {
+        await registerWidgetScript(store.store_id);
+        console.log(`✅  Script widget re-registrado para tienda ${store.store_id}`);
+      } catch (e) {
+        console.warn(`⚠️  No se pudo re-registrar script para ${store.store_id}:`, e.message);
       }
     }
   }

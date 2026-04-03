@@ -62,6 +62,79 @@ async function tnFetch(storeId, endpoint, options = {}) {
   try { return JSON.parse(text); } catch { return text; }
 }
 
+// ─── ENVÍO GRATIS CABA / AMBA ─────────────────────────────────────────────────
+const CABA_RANGE  = [1000, 1499];
+const AMBA_RANGES = [
+  [1600, 1641], [1642, 1649], [1618, 1649], [1650, 1679],
+  [1660, 1679], [1682, 1699], [1706, 1729], [1714, 1718],
+  [1686, 1692], [1722, 1749], [1742, 1749], [1752, 1779],
+  [1741, 1760], [1802, 1818], [1820, 1836], [1840, 1866],
+  [1868, 1878], [1876, 1882], [1880, 1884], [1886, 1889],
+];
+
+function isCabaAmba(zipcode) {
+  if (!zipcode) return false;
+  const z = String(zipcode).trim().toUpperCase().replace(/\s+/g, '');
+  if (/^C1\d{3}/.test(z)) return true;                          // CABA nuevo (C1xxx)
+  if (z.startsWith('B')) {
+    const num = parseInt(z.slice(1, 5), 10);
+    if (!isNaN(num)) return AMBA_RANGES.some(([lo, hi]) => num >= lo && num <= hi);
+  }
+  const num = parseInt(z, 10);
+  if (!isNaN(num) && /^\d{4}$/.test(z.replace(/[A-Z]/g, ''))) {
+    if (num >= CABA_RANGE[0] && num <= CABA_RANGE[1]) return true;
+    return AMBA_RANGES.some(([lo, hi]) => num >= lo && num <= hi);
+  }
+  return false;
+}
+
+// Verifica si al menos un producto del carrito tiene regla de envío activa
+function cartHasShippingRule(db, storeId, cartItems) {
+  const rules = (db.shipping_rules || []).filter(r => r.store_id === storeId && r.active);
+  if (rules.length === 0) return false;
+  // Si existe una regla "all", aplica a cualquier producto
+  if (rules.some(r => r.target_type === 'all')) return true;
+  // Si algún producto del carrito tiene regla explícita, aplica
+  return cartItems.some(item => {
+    const pid = String(item.product_id || item.id || '');
+    return rules.some(r =>
+      r.target_type === 'products' && r.target_ids.map(String).includes(pid)
+    );
+  });
+}
+
+async function registerShippingCarrier(storeId) {
+  const db    = readDB();
+  const store = db.stores[storeId];
+  if (!store?.access_token) return;
+
+  const body = {
+    name:         'Envío Gratis CABA y GBA',
+    callback_url: `${process.env.APP_URL}/shipping/callback`,
+    types:        'ship'
+  };
+
+  try {
+    const carrierId = store.shipping_carrier_id;
+    let result;
+    if (carrierId) {
+      result = await tnFetch(storeId, `/shipping_carriers/${carrierId}`, { method: 'PUT', body: JSON.stringify(body) });
+    } else {
+      result = await tnFetch(storeId, '/shipping_carriers', { method: 'POST', body: JSON.stringify(body) });
+    }
+    console.log('[shipping-carrier] result:', JSON.stringify(result));
+    const newId = result?.id || result?.data?.id;
+    if (newId) {
+      const db2 = readDB();
+      db2.stores[storeId].shipping_carrier_id = String(newId);
+      writeDB(db2);
+      console.log(`[shipping-carrier] registrado id=${newId} para tienda ${storeId}`);
+    }
+  } catch(e) {
+    console.error('[shipping-carrier] error:', e.message);
+  }
+}
+
 function findRule(rules, productId, categoryIds = []) {
   const active = rules.filter(r => r.active);
   for (const r of active) {
@@ -172,6 +245,11 @@ app.get('/auth/callback', async (req, res) => {
       await registerWidgetScript(storeIdStr);
     } catch (e) { console.warn('No se pudo registrar script:', e.message); }
 
+    // Registrar el carrier de envío gratis CABA/AMBA
+    try {
+      await registerShippingCarrier(storeIdStr);
+    } catch (e) { console.warn('No se pudo registrar shipping carrier:', e.message); }
+
     res.redirect(`/?store=${storeIdStr}&connected=1`);
   } catch (err) {
     console.error('OAuth error:', err);
@@ -230,7 +308,66 @@ app.post('/discount/callback', (req, res) => {
   res.json(respBody);
 });
 
+// ─── SHIPPING CARRIER CALLBACK ───────────────────────────────────────────────
+// TN llama este endpoint durante el checkout con CP destino + ítems del carrito
+app.post('/shipping/callback', (req, res) => {
+  console.log('[shipping-callback]', JSON.stringify(req.body));
+
+  const storeId = String(req.body?.store_id || '');
+  const zipcode = req.body?.destination?.postal_code
+                || req.body?.destination?.zipcode
+                || req.body?.destination?.zip
+                || '';
+  const items   = Array.isArray(req.body?.items) ? req.body.items : [];
+
+  const db = readDB();
+
+  // Si el CP no es CABA/AMBA → no ofrecemos envío, TN usa sus carriers
+  if (!isCabaAmba(zipcode)) {
+    console.log(`[shipping-callback] CP ${zipcode} fuera de zona → sin tarifa`);
+    return res.json({ rates: [] });
+  }
+
+  // Si ningún producto del carrito tiene regla de envío → no ofrecemos
+  if (!cartHasShippingRule(db, storeId, items)) {
+    console.log(`[shipping-callback] CP ${zipcode} en zona pero sin regla de envío para estos productos`);
+    return res.json({ rates: [] });
+  }
+
+  const hoy  = new Date();
+  const min_ = new Date(hoy.getTime() + 1*86400000).toISOString();
+  const max_ = new Date(hoy.getTime() + 3*86400000).toISOString();
+
+  console.log(`[shipping-callback] CP ${zipcode} → envío gratis`);
+  res.json({
+    rates: [{
+      name:              'Envío Gratis',
+      code:              'envio_gratis_caba_gba',
+      price:             0,
+      price_merchant:    0,
+      currency:          'ARS',
+      type:              'ship',
+      min_delivery_date: min_,
+      max_delivery_date: max_,
+      phone_required:    false,
+      reference:         'envio_gratis_caba_gba'
+    }]
+  });
+});
+
 // ─── API – TIENDAS ────────────────────────────────────────────────────────────
+
+// Registrar manualmente el carrier de envío para una tienda ya conectada
+app.post('/api/stores/:storeId/register-carrier', async (req, res) => {
+  try {
+    await registerShippingCarrier(req.params.storeId);
+    const db = readDB();
+    const carrierId = db.stores[req.params.storeId]?.shipping_carrier_id;
+    res.json({ ok: true, shipping_carrier_id: carrierId || null });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 app.get('/api/stores', (_, res) => {
   const db = readDB();

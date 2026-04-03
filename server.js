@@ -309,32 +309,41 @@ async function registerWidgetScript(storeId) {
 
   const scriptUrl = `${process.env.APP_URL}/widget/${storeId}/widget.js`;
   // TN requiere un script_id entero único provisto por el developer
-  // Usamos los últimos 6 dígitos del storeId como entero (ej: 538420 para 4538420)
   const myScriptId = parseInt(String(storeId).slice(-6), 10);
 
-  let res;
-  // Intentar actualizar con PUT primero (si ya existe el script)
-  const putRes = await tnFetch(storeId, `/scripts/${myScriptId}`, {
-    method: 'PUT',
-    body: JSON.stringify({ src: scriptUrl, event: 'onload', where: 'store' })
-  });
+  // 1. Listar scripts existentes para ver si ya está registrado
+  const listRes = await tnFetch(storeId, '/scripts');
+  console.log(`[script] listado en tienda ${storeId}:`, JSON.stringify(listRes));
 
-  // tnFetch no lanza error en 404, devuelve { code: 404 }
-  // Si PUT retornó error o 404 (script no existe aún), crear con POST
-  const putOk = putRes && !putRes.code && !putRes.error;
-  if (!putOk) {
-    console.log(`[script] PUT falló (${JSON.stringify(putRes)}), intentando POST con script_id=${myScriptId}...`);
+  const scripts = Array.isArray(listRes) ? listRes
+                : Array.isArray(listRes?.data) ? listRes.data
+                : [];
+
+  // Buscar si ya existe un script con nuestra URL o script_id
+  const existing = scripts.find(s =>
+    s.src === scriptUrl ||
+    Number(s.script_id) === myScriptId
+  );
+
+  let res;
+  if (existing) {
+    // Ya existe — actualizarlo con PUT usando el ID asignado por TN
+    const tnId = existing.id || existing.script_id || myScriptId;
+    res = await tnFetch(storeId, `/scripts/${tnId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ src: scriptUrl, event: 'onload', where: 'store' })
+    });
+    console.log(`[script] actualizado (id=${tnId}) en tienda ${storeId}:`, JSON.stringify(res));
+  } else {
+    // No existe — crearlo con POST
     res = await tnFetch(storeId, '/scripts', {
       method: 'POST',
       body: JSON.stringify({ script_id: myScriptId, src: scriptUrl, event: 'onload', where: 'store' })
     });
     console.log(`[script] creado en tienda ${storeId}:`, JSON.stringify(res));
-  } else {
-    res = putRes;
-    console.log(`[script] actualizado en tienda ${storeId}:`, JSON.stringify(res));
   }
 
-  const scriptId = res?.data?.id || res?.id || myScriptId;
+  const scriptId = res?.data?.id || res?.id || existing?.id || myScriptId;
   const db2 = readDB();
   db2.stores[storeId].script_id = String(scriptId);
   writeDB(db2);

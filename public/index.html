@@ -795,6 +795,7 @@ function renderRules(rules) {
   const widgetTag = `&lt;script src="${widgetScriptUrl}"&gt;&lt;/script&gt;`;
   const widgetTagRaw = `<script src="${widgetScriptUrl}"><\/script>`;
 
+  const widgetTagAttr = widgetTagRaw.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
   const widgetHtml = `
     <div class="card" style="margin-bottom:16px;border:1.5px solid #aad4f5;background:#eef6ff;">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
@@ -805,9 +806,9 @@ function renderRules(rules) {
         </div>
       </div>
       <div style="background:#1a3c5e;border-radius:6px;padding:12px 14px;display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-        <code style="flex:1;color:#7dd3fc;font-size:12px;font-family:monospace;word-break:break-all;">${widgetTag}</code>
-        <button onclick="navigator.clipboard.writeText('${widgetTagRaw.replace(/'/g,"\\'")}').then(()=>toast('✅ Código copiado','success'))"
-          style="background:#2563eb;color:#fff;border:none;padding:6px 12px;border-radius:5px;cursor:pointer;font-size:12px;white-space:nowrap;">
+        <code style="flex:1;color:#7dd3fc;font-size:12px;font-family:monospace;overflow-wrap:break-word;min-width:0;">${widgetTag}</code>
+        <button data-tag="${widgetTagAttr}" onclick="navigator.clipboard.writeText(this.dataset.tag).then(()=>toast('✅ Código copiado','success'))"
+          style="background:#2563eb;color:#fff;border:none;padding:6px 12px;border-radius:5px;cursor:pointer;font-size:12px;white-space:nowrap;flex-shrink:0;">
           📋 Copiar
         </button>
       </div>

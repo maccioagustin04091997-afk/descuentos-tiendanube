@@ -1273,7 +1273,7 @@ async function openEditShippingRule(id) {
 
 async function saveShippingRule() {
   const name        = document.getElementById('f-name').value.trim();
-  const target_type = document.getElementById('f-target-type').value;
+  const target_type = targetType;
   const target_ids  = [...selectedIds];
 
   if (!name) { toast('Ingresá un nombre', 'error'); return; }

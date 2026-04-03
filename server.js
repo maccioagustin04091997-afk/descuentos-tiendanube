@@ -359,6 +359,20 @@ app.get('/api/public/rules/:storeId', (req, res) => {
   res.json(rules);
 });
 
+// Verificar si un producto específico tiene descuento configurado
+// GET /api/public/product-discount/:storeId/:productId?categories=id1,id2
+app.get('/api/public/product-discount/:storeId/:productId', (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  const db = readDB();
+  const rules = db.rules.filter(r => r.store_id === req.params.storeId);
+  const categoryIds = req.query.categories
+    ? req.query.categories.split(',').map(s => s.trim()).filter(Boolean)
+    : [];
+  const rule = findRule(rules, req.params.productId, categoryIds);
+  if (!rule) return res.json({ applies: false });
+  res.json({ applies: true, scales: rule.scales || [] });
+});
+
 // Widget JS dinámico por tienda
 app.get('/widget/:storeId/widget.js', (req, res) => {
   res.header('Content-Type', 'application/javascript; charset=utf-8');
@@ -385,31 +399,29 @@ function buildWidgetScript(storeId, appUrl) {
     return null;
   }
 
+  function getCategoryIds() {
+    try {
+      if (typeof LS !== 'undefined' && LS.product && Array.isArray(LS.product.categories)) {
+        return LS.product.categories.map(function(c) { return String(c.id || c); }).filter(Boolean);
+      }
+    } catch(e) {}
+    return [];
+  }
+
   ready(function() {
     var productId = getProductId();
     if (!productId) return;
 
-    fetch(API + '/api/public/rules/' + STORE_ID)
+    var categoryIds = getCategoryIds();
+    var url = API + '/api/public/product-discount/' + STORE_ID + '/' + productId;
+    if (categoryIds.length > 0) url += '?categories=' + categoryIds.join(',');
+
+    fetch(url)
       .then(function(r) { return r.json(); })
-      .then(function(rules) {
-        if (!Array.isArray(rules) || rules.length === 0) return;
+      .then(function(data) {
+        if (!data.applies) return;
 
-        // Buscar regla aplicable: producto específico > general
-        var rule = null;
-        for (var i = 0; i < rules.length; i++) {
-          if (rules[i].target_type === 'products') {
-            var ids = (rules[i].target_ids || []).map(String);
-            if (ids.indexOf(productId) !== -1) { rule = rules[i]; break; }
-          }
-        }
-        if (!rule) {
-          for (var i = 0; i < rules.length; i++) {
-            if (rules[i].target_type === 'all') { rule = rules[i]; break; }
-          }
-        }
-        if (!rule) return;
-
-        var scales = (rule.scales || []).filter(function(s) { return s.pct > 0; });
+        var scales = (data.scales || []).filter(function(s) { return s.pct > 0; });
         if (scales.length === 0) return;
 
         // ── Construir HTML del widget ─────────────────────────────

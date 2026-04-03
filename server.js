@@ -200,8 +200,8 @@ app.post('/discount/callback', (req, res) => {
     const discountPct = rule ? getDiscount(rule, qty) : 0;
 
     if (discountPct > 0 && unitPrice > 0) {
-      // TN sólo acepta type "fixed" — calculamos el descuento fijo por unidad
-      const discountPerUnit = (unitPrice * discountPct / 100).toFixed(2);
+      // TN aplica "fixed" como descuento TOTAL de la línea (no por unidad)
+      const totalDiscount = (unitPrice * qty * discountPct / 100).toFixed(2);
       commands.push({
         command: 'create_or_update_discount',
         specs: {
@@ -210,12 +210,12 @@ app.post('/discount/callback', (req, res) => {
           display_text: {
             'es-ar': `${discountPct}% OFF por volumen`
           },
-          line_items: [{ line_item: String(lineItemId), discount_specs: { type: 'fixed', amount: discountPerUnit } }]
+          line_items: [{ line_item: String(lineItemId), discount_specs: { type: 'fixed', amount: totalDiscount } }]
         }
       });
-    } else {
-      commands.push({ command: 'remove_discount', specs: { promotion_id: store.promotion_id, line_items: [String(lineItemId)] } });
+      console.log(`[callback] descuento ${discountPct}% sobre ${qty}u × $${unitPrice} = -$${totalDiscount}`);
     }
+    // No enviamos remove_discount si no hay descuento (puede romper el batch)
   }
 
   if (commands.length === 0) return res.status(204).send();

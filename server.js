@@ -291,8 +291,20 @@ app.delete('/api/rules/:id', (req, res) => {
 // ─── PROXY – Productos y Categorías ──────────────────────────────────────────
 
 app.get('/api/tn/:storeId/products', async (req, res) => {
-  try { res.json(await tnFetch(req.params.storeId, `/products?per_page=200`)); }
-  catch (e) { res.status(500).json({ error: e.message }); }
+  try {
+    // Paginar automáticamente hasta traer todos los productos
+    let all = [];
+    let page = 1;
+    const perPage = 200;
+    while (true) {
+      const batch = await tnFetch(req.params.storeId, `/products?per_page=${perPage}&page=${page}`);
+      if (!Array.isArray(batch) || batch.length === 0) break;
+      all = all.concat(batch);
+      if (batch.length < perPage) break; // última página
+      page++;
+    }
+    res.json(all);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/tn/:storeId/categories', async (req, res) => {
